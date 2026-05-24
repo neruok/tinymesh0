@@ -1,0 +1,34 @@
+services:
+  node-a:
+    build: .
+    container_name: node-a
+    hostname: node-a
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./configs/node-a.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys/node-a.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks:
+      - mesh-test
+
+  node-b:
+    build: .
+    container_name: node-b
+    hostname: node-b
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./configs/node-b.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys/node-b.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks:
+      - mesh-test
+    depends_on:
+      - node-a
+
+networks:
+  mesh-test:
+    driver: bridge

@@ -1,0 +1,16 @@
+hostname: mynode
+listen-port: 51820
+# Local path for development. For production use /etc/tinymesh0/private.key
+key-file: ./tinymesh0.key
+
+stun-servers:
+  - stun.l.google.com:19302
+  - stun.cloudflare.com:3478
+
+gossip:
+  bind-port: 7946
+  retry-join: 10
+  # Leave bootstrap-peers empty if this is the first (seed) node.
+  # Other nodes list the seed's address here to join the cluster.
+  bootstrap-peers:
+    # - "seed-node.example.com:7946"
