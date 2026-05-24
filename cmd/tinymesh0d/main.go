@@ -95,9 +95,8 @@ func runUp(cfgFile string) error {
 		fmt.Printf("advertise endpoint: %s (from config)\n", publicEndpoint)
 	} else {
 		fmt.Println("discovering public endpoint via STUN...")
-		stunResult, err := stun.Discover(cfg.STUNServers)
-		if err != nil {
-			fmt.Printf("STUN failed (%v) — peers will connect without a pre-known endpoint\n", err)
+		if stunResult, stunErr := stun.Discover(cfg.STUNServers); stunErr != nil {
+			fmt.Printf("STUN failed (%v) — peers will connect without a pre-known endpoint\n", stunErr)
 		} else {
 			publicEndpoint = fmt.Sprintf("%s:%d", stunResult.IP, cfg.ListenPort)
 			fmt.Printf("public endpoint: %s\n", publicEndpoint)
@@ -108,14 +107,14 @@ func runUp(cfgFile string) error {
 	if err != nil {
 		return fmt.Errorf("creating WireGuard manager: %w", err)
 	}
-	defer wgMgr.Close()
+	defer wgMgr.Close() //nolint:errcheck // best-effort cleanup in defer
 
 	wgCfg := wireguard.Config{
 		PrivateKey: privKey,
 		ListenPort: cfg.ListenPort,
 		MeshIP:     meshIP,
 	}
-	if err := wgMgr.Up(wgCfg); err != nil {
+	if err = wgMgr.Up(wgCfg); err != nil {
 		return fmt.Errorf("bringing up interface: %w", err)
 	}
 	fmt.Println("tinymesh0 is up")
@@ -162,8 +161,8 @@ func runDown() error {
 	if err != nil {
 		return err
 	}
-	defer mgr.Close()
-	if err := mgr.Down(); err != nil {
+	defer mgr.Close() //nolint:errcheck // best-effort cleanup in defer
+	if err = mgr.Down(); err != nil {
 		return err
 	}
 	fmt.Println("tinymesh0 down")
@@ -175,7 +174,7 @@ func runStatus() error {
 	if err != nil {
 		return err
 	}
-	defer mgr.Close()
+	defer mgr.Close() //nolint:errcheck // best-effort cleanup in defer
 
 	dev, err := mgr.Status()
 	if err != nil {

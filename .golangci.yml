@@ -1,0 +1,21 @@
+version: "2"
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - errcheck       # catch unchecked errors
+    - govet          # suspicious constructs (alignment, shadowing, etc.)
+    - ineffassign    # detect ineffectual assignments
+    - staticcheck    # comprehensive static analysis
+    - unused         # find unused code
+    - misspell       # typos in comments and strings
+    - nilerr         # detect returning nil on error paths where err != nil
+  settings:
+    govet:
+      enable:
+        - shadow      # warn on shadowed variables (common source of bugs in Go)
+formatters:
+  enable:
+    - gofmt
+    - goimports

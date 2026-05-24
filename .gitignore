@@ -13,3 +13,5 @@ configs/
 
 # Claude
 CLAUDE.md
+CLAUDE.local.md
+.claude

@@ -94,10 +94,10 @@ func (m *Manager) NodeMeta(limit int) []byte {
 	return data
 }
 
-func (m *Manager) NotifyMsg([]byte)                            {}
+func (m *Manager) NotifyMsg([]byte)                           {}
 func (m *Manager) GetBroadcasts(overhead, limit int) [][]byte { return nil }
-func (m *Manager) LocalState(join bool) []byte                 { return nil }
-func (m *Manager) MergeRemoteState(buf []byte, join bool)      {}
+func (m *Manager) LocalState(join bool) []byte                { return nil }
+func (m *Manager) MergeRemoteState(buf []byte, join bool)     {}
 
 // --- memberlist.EventDelegate ---
 

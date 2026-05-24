@@ -49,19 +49,19 @@ func query(server string) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial: %w", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck // best-effort cleanup in defer
 
 	var txID [12]byte
-	if _, err := rand.Read(txID[:]); err != nil {
+	if _, err = rand.Read(txID[:]); err != nil {
 		return nil, fmt.Errorf("generating transaction ID: %w", err)
 	}
 
 	req := buildBindingRequest(txID)
 
-	if err := conn.SetDeadline(time.Now().Add(readTimeout)); err != nil {
+	if err = conn.SetDeadline(time.Now().Add(readTimeout)); err != nil {
 		return nil, err
 	}
-	if _, err := conn.Write(req); err != nil {
+	if _, err = conn.Write(req); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
 
@@ -114,7 +114,7 @@ func parseResponse(data []byte, txID [12]byte) (*Result, error) {
 		return nil, errors.New("message length exceeds buffer")
 	}
 
-	return parseAttributes(data[20:20+msgLen])
+	return parseAttributes(data[20 : 20+msgLen])
 }
 
 func parseAttributes(attrs []byte) (*Result, error) {

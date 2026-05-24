@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ifName            = "tinymesh0"
+	ifName              = "tinymesh0"
 	persistentKeepalive = 25 * time.Second
 )
 
