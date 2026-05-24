@@ -43,6 +43,8 @@ Each node:
 - **Encryption** — WireGuard (ChaCha20-Poly1305 + Noise protocol) encrypts all traffic between nodes.
 - **No coordinator** — gossip (SWIM protocol) propagates peer state across the mesh. *(Phase 2)*
 
+> **Address space note:** `100.64.0.0/10` is designated by [RFC 6598](https://datatracker.ietf.org/doc/html/rfc6598) as "Shared Address Space" for ISP Carrier-Grade NAT (CGN) deployments — not for general private overlay use. tinymesh0 uses it anyway, following the same precedent as Tailscale: the range is non-routable on the public internet and is unlikely to conflict with RFC 1918 ranges already used by home routers and corporate VPNs. The known risk is address collision on networks where the ISP itself uses CGN (common with some mobile carriers and residential ISPs). If you operate in such an environment, consider overriding the subnet in `internal/ipam/ipam.go` to use `172.16.0.0/12` instead.
+
 For a detailed technical walkthrough, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
 ---
