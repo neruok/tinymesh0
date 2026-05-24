@@ -10,3 +10,6 @@ configs/
 
 # macOS
 .DS_Store
+
+# Claude
+CLAUDE.md

@@ -1,0 +1,26 @@
+hostname: mynode
+listen-port: 51820
+# Local path for development. For production use /etc/tinymesh0/private.key.
+key-file: ./tinymesh0.key
+
+stun-servers:
+  - stun.l.google.com:19302
+  - stun.cloudflare.com:3478
+
+# advertise-endpoint overrides STUN and sets the endpoint this node broadcasts
+# to peers via gossip. Leave unset on the public internet — STUN will discover
+# your public IP automatically. Set it when STUN gives the wrong answer:
+#
+#   Docker / LAN:      "node-a:51820"    (Docker DNS resolves to bridge IP)
+#   Known public IP:   "203.0.113.5:51820"
+#   Behind a LB/proxy: "vpn.example.com:51820"
+#
+# advertise-endpoint: ""
+
+gossip:
+  bind-port: 7946
+  retry-join: 10
+  # Leave bootstrap-peers empty if this is the seed (first) node in the cluster.
+  # All other nodes need at least one known peer address to bootstrap from.
+  bootstrap-peers:
+    # - "seed-node.example.com:7946"

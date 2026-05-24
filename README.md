@@ -75,7 +75,7 @@ Share your **public key** and your **public IP:port** with the nodes you want to
 
 ### Configure
 
-Copy the example config and fill in your peers:
+Copy the example config and edit it:
 
 ```bash
 cp tinymesh0.example.yaml tinymesh0.yaml
@@ -90,12 +90,29 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 
-peers:
-  - public-key: "<peer public key>"
-    endpoint: "<peer public IP>:51820"
+gossip:
+  bind-port: 7946
+  retry-join: 10
+  bootstrap-peers:
+    - "seed-node.example.com:7946"  # omit if this node is the seed
 ```
 
-The peer's mesh IP is derived automatically from their public key — you don't configure it manually.
+Peers are discovered automatically via gossip — no manual key exchange or endpoint configuration required.
+
+### advertise-endpoint
+
+By default, tinymesh0 uses STUN to discover its public IP and broadcasts that to peers via gossip. Set `advertise-endpoint` to override this when STUN gives the wrong answer:
+
+| Scenario | Value |
+|---|---|
+| Public internet (default) | *(leave unset — STUN handles it)* |
+| Docker / local network | `"node-a:51820"` (hostname Docker DNS resolves) |
+| Known static public IP | `"203.0.113.5:51820"` |
+| Behind a load balancer or proxy | `"vpn.example.com:51820"` |
+
+```yaml
+advertise-endpoint: "vpn.example.com:51820"
+```
 
 ### Run
 
@@ -109,7 +126,9 @@ mesh IP    : 100.75.167.232
 discovering public endpoint via STUN...
 public endpoint: 216.243.46.97:51820
 tinymesh0 is up
-  peer Nh/YpdBJKH/... → 100.117.163.169 via 1.2.3.4:51820
+gossip listening on :7946
+joined cluster via [seed-node.example.com:7946]
+gossip: peer joined — node-b  mesh=100.117.163.169  endpoint=198.51.100.9:51820
 ```
 
 ### Commands
@@ -157,8 +176,8 @@ You should see sub-millisecond ping times and a confirmed WireGuard handshake.
 
 | Phase | Status | Description |
 |---|---|---|
-| 1 — Core tunnel | ✅ Done | WireGuard interface management, STUN discovery, static peer config |
-| 2 — Gossip | 🔨 In progress | SWIM-based peer discovery, no static config needed |
+| 1 — Core tunnel | ✅ Done | WireGuard interface management, STUN discovery |
+| 2 — Gossip | ✅ Done | SWIM-based peer discovery, dynamic WireGuard config, no static peers |
 | 3 — Policy engine | 📋 Planned | Per-node allow/deny rules enforced via iptables |
 | 4 — Mesh DNS | 📋 Planned | Resolve `<hostname>.mesh` to peer mesh IPs |
 | 5 — Topology UI | 📋 Planned | Live network graph via WebSocket + D3.js |
