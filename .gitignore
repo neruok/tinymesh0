@@ -1,5 +1,5 @@
-# Compiled binaries
-tinymesh0d
+# Compiled binary (leading slash anchors to repo root, won't match cmd/tinymesh0d/)
+/tinymesh0d
 
 # Private keys — never commit these
 *.key
