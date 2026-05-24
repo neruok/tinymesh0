@@ -62,8 +62,16 @@ For a detailed technical walkthrough, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 ```bash
 git clone https://github.com/jakenoc/tinymesh0
 cd tinymesh0
-go build -o tinymesh0d ./cmd/tinymesh0d/
+make build
 ```
+
+| Target | Description |
+|---|---|
+| `make build` | Compile `tinymesh0d` binary |
+| `make test` | Run all unit tests |
+| `make lint` | Run golangci-lint (downloads on first use via `go run`) |
+| `make dev` | Generate keys, build configs, and launch a two-node Docker mesh |
+| `make release` | Run `build → test → lint` in sequence; fails fast on any error |
 
 ### Generate a keypair
 
@@ -148,19 +156,11 @@ gossip: peer joined — node-b  mesh=100.117.163.169  endpoint=198.51.100.9:5182
 
 You can simulate a two-node mesh on a single machine using Docker Compose.
 
-**1. Generate keys and configs:**
-
 ```bash
-bash scripts/setup-dev.sh
+make dev
 ```
 
-**2. Start both nodes:**
-
-```bash
-docker compose up --build
-```
-
-**3. Verify the tunnel:**
+This generates keys, writes per-node configs, and starts both containers. To verify the tunnel:
 
 ```bash
 # Check peer status on node-b
