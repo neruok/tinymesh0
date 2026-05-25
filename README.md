@@ -9,8 +9,10 @@
 
 > **Peer pressure, but encrypted.**
 
-[![Go Version](https://img.shields.io/badge/go-1.22-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.24-blue)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+![tinymesh0 topology UI — six-node mesh with live latency, bandwidth particles, and per-node policy](docs/topology-ui.png)
 
 ---
 
@@ -22,8 +24,8 @@ Each node:
 - Gets a **stable private IP** derived deterministically from its cryptographic identity
 - **Discovers its own public endpoint** via STUN (no manual IP configuration)
 - Establishes **encrypted WireGuard tunnels** directly to every peer
-- Enforces **per-node access policy** at the network layer *(Phase 3)*
-- Participates in **gossip-based peer discovery** — nodes find each other automatically *(Phase 2)*
+- Enforces **per-node access policy** at the network layer
+- Participates in **gossip-based peer discovery** — nodes find each other automatically
 
 ---
 
@@ -41,7 +43,7 @@ Each node:
 - **Identity** — each node's public key (Curve25519) is its identity. The mesh IP is a SHA-256 hash of that key, mapped into `100.64.0.0/10`.
 - **Discovery** — STUN tells each node its own public IP without any central registry.
 - **Encryption** — WireGuard (ChaCha20-Poly1305 + Noise protocol) encrypts all traffic between nodes.
-- **No coordinator** — gossip (SWIM protocol) propagates peer state across the mesh. *(Phase 2)*
+- **No coordinator** — gossip (SWIM protocol) propagates peer state across the mesh.
 
 > **Address space note:** `100.64.0.0/10` is designated by [RFC 6598](https://datatracker.ietf.org/doc/html/rfc6598) as "Shared Address Space" for ISP Carrier-Grade NAT (CGN) deployments — not for general private overlay use. tinymesh0 uses it anyway, following the same precedent as Tailscale: the range is non-routable on the public internet and is unlikely to conflict with RFC 1918 ranges already used by home routers and corporate VPNs. The known risk is address collision on networks where the ISP itself uses CGN (common with some mobile carriers and residential ISPs). If you operate in such an environment, consider overriding the subnet in `internal/ipam/ipam.go` to use `172.16.0.0/12` instead.
 
@@ -54,7 +56,7 @@ For a detailed technical walkthrough, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 ### Prerequisites
 
 - Linux (kernel 5.6+ for built-in WireGuard support)
-- Go 1.22+
+- Go 1.24+
 - Root / `CAP_NET_ADMIN` (required to create network interfaces)
 
 ### Build
@@ -466,26 +468,29 @@ The state file at `/var/run/tinymesh0d-dns.json` is rewritten on every peer join
 
 Each daemon serves a live network graph at `http://<node-addr>:8080`. The UI is a single embedded HTML page — no external files, no install step.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  tinymesh0                                              │
-│  hostname  node-a                    ●  node-a          │
-│  mesh ip   100.75.167.232           /  (self)           │
-│  endpoint  203.0.113.5:51820    3.1 ms                  │
-│  peers     1                       \                    │
-│                                     ●  node-b (active)  │
-└─────────────────────────────────────────────────────────┘
-```
+**Header bar** — always visible at the top: hostname, mesh IP, public endpoint, connected peer count, and live aggregate TX/RX bandwidth rates updated every 3 seconds.
+
+**Graph canvas** — D3 force-directed graph. Nodes settle into a stable layout and stay put as stats update; only a structural change (peer joining or leaving) re-energizes the simulation.
 
 **What it shows:**
 
 | Element | Meaning |
 |---|---|
-| Orange node | This node |
-| Green node | Peer with an active WireGuard handshake (< 5 min ago) |
-| Dark node | Peer known via gossip but not yet connected |
-| Edge label | Round-trip latency from ICMP probe (updated every 10 s) |
-| Hover tooltip | Endpoint, latency, bytes sent/received, handshake age |
+| Orange node | This node (self) |
+| Colored node | Peer with an active WireGuard handshake (< 5 min ago); color reflects latency |
+| Dark/gray node | Peer known via gossip but no active handshake |
+| Edge color | Latency-mapped: green < 5 ms → yellow < 50 ms → red > 50 ms |
+| Edge opacity | Full = connected; faded = disconnected or unmeasured |
+| Dotted edge | Peer-to-peer link (mesh view); solid = link to/from self |
+| Traffic particles | Animated dots flowing along edges — orange = TX, blue = RX; size scales with bandwidth |
+| Click node | Opens a detail panel with endpoint, latency, handshake age, bytes sent/received |
+
+**View toggle** — switch between two perspectives using the **Local / Mesh** buttons in the top-right corner:
+
+| Mode | What it shows |
+|---|---|
+| Local | Star topology centered on this node — only direct connections to self |
+| Mesh | All-pairs topology — every peer-to-peer edge in the network; unmeasured links shown as dotted |
 
 **Access the UI:**
 
@@ -518,8 +523,9 @@ topology:
 | `GET /` | Embedded D3.js topology UI |
 | `GET /api/topology` | JSON snapshot of self + peers with WireGuard stats |
 | `GET /api/stream` | SSE stream — emits a `topology` event on every state change |
+| `GET /metrics` | Prometheus text-format metrics (peer count, handshake age, bytes, latency) |
 
-The SSE stream sends an initial `topology` event on connect so the UI renders immediately without waiting for a peer join/leave event.
+The SSE stream sends an initial `topology` event on connect so the UI renders immediately without waiting for a peer join/leave event. The `/metrics` endpoint is compatible with any Prometheus scrape config — add `http://<node-ip>:8080/metrics` as a target.
 
 ---
 
