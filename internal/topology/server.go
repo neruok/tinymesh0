@@ -24,7 +24,10 @@ import (
 //go:embed ui
 var uiFS embed.FS
 
-const probeInterval = 10 * time.Second
+const (
+	probeInterval = 10 * time.Second
+	statsInterval = 3 * time.Second
+)
 
 var pingRTTRe = regexp.MustCompile(`time=(\d+(?:\.\d+)?)\s*ms`)
 
@@ -121,12 +124,14 @@ func (s *Server) Start(addr string) (stop func(), err error) {
 	mux.Handle("/", http.FileServer(http.FS(ui)))
 	mux.HandleFunc("/api/topology", s.handleTopology)
 	mux.HandleFunc("/api/stream", s.handleStream)
+	mux.HandleFunc("/metrics", s.handleMetrics)
 
 	s.httpSrv = &http.Server{Handler: mux}
 	go func() { _ = s.httpSrv.Serve(ln) }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.probeLoop(ctx)
+	go s.statsLoop(ctx)
 
 	return func() {
 		cancel()
@@ -307,4 +312,96 @@ func pingRTT(ip string) (float64, error) {
 		return 0, fmt.Errorf("no RTT in ping output")
 	}
 	return strconv.ParseFloat(string(m[1]), 64)
+}
+
+// statsLoop broadcasts the current topology on a short interval so connected
+// UI clients see WireGuard byte counters update without waiting for a peer event.
+func (s *Server) statsLoop(ctx context.Context) {
+	ticker := time.NewTicker(statsInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.broadcastTopology()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// handleMetrics serves Prometheus text-format metrics for the local node and
+// all known peers. No external library — hand-rolled exposition format.
+func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	topo := s.buildTopology()
+
+	line := func(f string, args ...any) { _, _ = fmt.Fprintf(w, f+"\n", args...) }
+
+	line("# HELP tinymesh0_info Node identity labels.")
+	line("# TYPE tinymesh0_info gauge")
+	line("tinymesh0_info{hostname=%q,mesh_ip=%q,public_key=%q} 1",
+		topo.Self.Hostname, topo.Self.MeshIP, topo.Self.PublicKey)
+
+	line("")
+	line("# HELP tinymesh0_peers_total Number of known gossip peers.")
+	line("# TYPE tinymesh0_peers_total gauge")
+	line("tinymesh0_peers_total %d", len(topo.Peers))
+
+	if len(topo.Peers) == 0 {
+		return
+	}
+
+	line("")
+	line("# HELP tinymesh0_peer_connected 1 if WireGuard handshake is current (< 5 min).")
+	line("# TYPE tinymesh0_peer_connected gauge")
+	for _, p := range topo.Peers {
+		v := 0
+		if p.Connected {
+			v = 1
+		}
+		line("tinymesh0_peer_connected{hostname=%q,mesh_ip=%q} %d", p.Hostname, p.MeshIP, v)
+	}
+
+	line("")
+	line("# HELP tinymesh0_peer_handshake_age_seconds Seconds since last WireGuard handshake.")
+	line("# TYPE tinymesh0_peer_handshake_age_seconds gauge")
+	for _, p := range topo.Peers {
+		if p.LastHandshake == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, p.LastHandshake)
+		if err != nil {
+			continue
+		}
+		line("tinymesh0_peer_handshake_age_seconds{hostname=%q,mesh_ip=%q} %.1f",
+			p.Hostname, p.MeshIP, time.Since(t).Seconds())
+	}
+
+	line("")
+	line("# HELP tinymesh0_peer_received_bytes_total Bytes received from peer since daemon start.")
+	line("# TYPE tinymesh0_peer_received_bytes_total counter")
+	for _, p := range topo.Peers {
+		line("tinymesh0_peer_received_bytes_total{hostname=%q,mesh_ip=%q} %d", p.Hostname, p.MeshIP, p.RxBytes)
+	}
+
+	line("")
+	line("# HELP tinymesh0_peer_transmitted_bytes_total Bytes transmitted to peer since daemon start.")
+	line("# TYPE tinymesh0_peer_transmitted_bytes_total counter")
+	for _, p := range topo.Peers {
+		line("tinymesh0_peer_transmitted_bytes_total{hostname=%q,mesh_ip=%q} %d", p.Hostname, p.MeshIP, p.TxBytes)
+	}
+
+	hasLatency := false
+	for _, p := range topo.Peers {
+		if p.LatencyMs <= 0 {
+			continue
+		}
+		if !hasLatency {
+			line("")
+			line("# HELP tinymesh0_peer_latency_milliseconds Latest ICMP round-trip time to peer in milliseconds.")
+			line("# TYPE tinymesh0_peer_latency_milliseconds gauge")
+			hasLatency = true
+		}
+		line("tinymesh0_peer_latency_milliseconds{hostname=%q,mesh_ip=%q} %.2f", p.Hostname, p.MeshIP, p.LatencyMs)
+	}
 }

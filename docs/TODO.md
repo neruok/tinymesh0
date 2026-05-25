@@ -67,7 +67,7 @@ A live graph rendered in the browser showing nodes, active tunnels, per-link lat
 - [ ] **Persistent membership** — write gossip membership to disk so nodes can reconnect to known peers without a bootstrap peer after a restart
 - [ ] **macOS support** — use `golang.zx2c4.com/wireguard` (userspace WireGuard) for macOS where kernel WireGuard may not be available
 - [ ] **Key rotation** — support rotating the WireGuard keypair and propagating the new public key via gossip
-- [ ] **Metrics endpoint** — expose Prometheus metrics (peer count, handshake age, bytes transferred) at `/metrics`
+- [x] **Metrics endpoint** — expose Prometheus metrics (peer count, handshake age, bytes transferred) at `/metrics`
 
 ---
 
@@ -84,6 +84,11 @@ Currently using `hashicorp/memberlist` as a black box. Replacing it with a hand-
 - [ ] Expose the same `NotifyJoin` / `NotifyLeave` / `NotifyUpdate` event interface so the rest of the codebase is unaffected
 - [ ] Tune probe interval, suspicion timeout, and retransmit multiplier and document the tradeoffs
 - [ ] Test convergence time with 3+ nodes in Docker
+
+### Add server fallback in high-latency mesh communication
+
+In the case of hight-latency or failures observed over the network, we should add a fallback server to direct nodes to one another.
+This would be similar to a DERP server in the Tailscale case.
 
 ### Own STUN Server (replace Google/Cloudflare)
 

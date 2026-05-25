@@ -4,308 +4,514 @@
 <meta charset="utf-8">
 <title>tinymesh0 — topology</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    background: #0d1117;
-    color: #e6edf3;
-    font-family: 'SF Mono', 'Consolas', 'Liberation Mono', monospace;
-    overflow: hidden;
-  }
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --border:   #30363d;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --orange:   #f0883e;
+  --orange2:  #c9610a;
+  --green:    #3fb950;
+  --green2:   #1a3a27;
+  --blue:     #388bfd;
+  --yellow:   #d29922;
+  --red:      #f85149;
+}
 
-  svg { display: block; width: 100vw; height: 100vh; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'SF Mono', 'Consolas', 'Liberation Mono', monospace;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-  .link {
-    stroke: #30363d;
-    stroke-width: 1.5;
-    fill: none;
-  }
-  .link.connected {
-    stroke: #388bfd;
-    stroke-width: 2;
-    stroke-dasharray: none;
-  }
+/* ── header ─────────────────────────────────────────────────────── */
+#header {
+  height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+#header-logo {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--orange);
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#logo-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+  animation: logo-pulse 2.5s ease-in-out infinite;
+}
+@keyframes logo-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(240,136,62,0.5); }
+  50%       { opacity: 0.5; box-shadow: 0 0 6px 3px rgba(240,136,62,0.1); }
+}
+.hdr-sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+.hdr-stat { font-size: 10px; display: flex; flex-direction: column; gap: 1px; }
+.hdr-label { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+.hdr-val   { color: var(--text); }
+#hdr-peers .hdr-val { color: var(--green); }
+#hdr-tx    .hdr-val { color: var(--orange); }
+#hdr-rx    .hdr-val { color: var(--blue); }
+#hdr-spacer { flex: 1; }
+#metrics-link {
+  font-size: 9px;
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+#metrics-link:hover { color: var(--text); border-color: var(--muted); }
 
-  .node-circle {
-    stroke-width: 2;
-    cursor: grab;
-  }
-  .node-circle:active { cursor: grabbing; }
+/* ── main area ───────────────────────────────────────────────────── */
+#main {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+svg#graph { display: block; width: 100%; height: 100%; }
 
-  .node-circle.self   { fill: #c9610a; stroke: #f0883e; }
-  .node-circle.peer   { fill: #1c2d3e; stroke: #30363d; }
-  .node-circle.connected { fill: #1a3a27; stroke: #3fb950; }
+/* ── detail panel (right slide-in) ──────────────────────────────── */
+#detail {
+  position: absolute;
+  top: 0; right: 0;
+  width: 280px; height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  padding: 20px 16px 20px;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  overflow-y: auto;
+  z-index: 5;
+}
+#detail.open { transform: translateX(0); }
+#detail-close {
+  position: absolute; top: 12px; right: 12px;
+  font-size: 14px; background: none; border: none;
+  color: var(--muted); cursor: pointer; line-height: 1;
+}
+#detail-close:hover { color: var(--text); }
+.detail-hostname {
+  font-size: 15px; font-weight: bold;
+  color: var(--text); margin-bottom: 3px; margin-right: 24px;
+}
+.detail-sub { font-size: 10px; color: var(--muted); margin-bottom: 16px; }
+.detail-section {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted); margin: 14px 0 6px;
+  border-bottom: 1px solid var(--border); padding-bottom: 4px;
+}
+.detail-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 10px; padding: 2px 0; color: var(--muted);
+}
+.detail-row span:last-child { color: var(--text); text-align: right; word-break: break-all; }
+.badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.badge.connected { background: var(--green2); color: var(--green); border: 1px solid #238636; }
+.badge.idle      { background: #1c2d3e;       color: var(--muted); border: 1px solid var(--border); }
+.bw-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 8px; }
+.bw-label span { color: var(--text); }
+.bw-track { background: var(--border); border-radius: 2px; height: 4px; margin-top: 3px; }
+.bw-fill  { height: 4px; border-radius: 2px; transition: width 0.6s ease; min-width: 2px; }
+.bw-fill.tx { background: var(--orange); }
+.bw-fill.rx { background: var(--blue); }
 
-  .node-label {
-    font-size: 11px;
-    fill: #e6edf3;
-    pointer-events: none;
-    text-anchor: middle;
-    dominant-baseline: middle;
-  }
-  .node-ip {
-    font-size: 9px;
-    fill: #8b949e;
-    pointer-events: none;
-    text-anchor: middle;
-    dominant-baseline: hanging;
-  }
+/* ── tooltip ─────────────────────────────────────────────────────── */
+#tooltip {
+  position: fixed;
+  background: #1c2128; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px;
+  font-size: 10px; pointer-events: none; display: none;
+  z-index: 30; line-height: 1.65; max-width: 240px;
+}
+.t-hostname { font-size: 12px; font-weight: bold; color: var(--text); margin-bottom: 6px; }
+.t-row { color: var(--muted); }
+.t-row span { color: var(--text); }
 
-  .link-label {
-    font-size: 9px;
-    fill: #6e7681;
-    text-anchor: middle;
-    pointer-events: none;
-  }
+/* ── status bar (bottom-center) ─────────────────────────────────── */
+#status-bar {
+  position: fixed; bottom: 12px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px; padding: 3px 14px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--surface);
+  white-space: nowrap; z-index: 20;
+}
+#status-bar.live         { color: var(--green);  border-color: #238636; }
+#status-bar.reconnecting { color: var(--yellow); }
+#status-bar.disconnected { color: var(--red);    }
 
-  /* ── side panel ────────────────────────────────────────────────── */
-  #panel {
-    position: fixed;
-    top: 16px;
-    left: 16px;
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    padding: 16px 20px;
-    min-width: 240px;
-    max-width: 300px;
-    font-size: 11px;
-  }
-  #panel-title {
-    font-size: 13px;
-    font-weight: bold;
-    color: #f0883e;
-    margin-bottom: 12px;
-    letter-spacing: 0.06em;
-  }
-  .row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 2px 0;
-    color: #8b949e;
-  }
-  .row span:last-child { color: #e6edf3; text-align: right; word-break: break-all; }
-
-  /* ── hover tooltip ─────────────────────────────────────────────── */
-  #tooltip {
-    position: fixed;
-    background: #1c2128;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-size: 10px;
-    pointer-events: none;
-    display: none;
-    z-index: 10;
-    line-height: 1.6;
-    max-width: 260px;
-  }
-  #tooltip .t-hostname { font-size: 12px; font-weight: bold; color: #e6edf3; margin-bottom: 6px; }
-  #tooltip .t-row { color: #8b949e; }
-  #tooltip .t-row span { color: #e6edf3; }
-
-  /* ── status bar ────────────────────────────────────────────────── */
-  #status-bar {
-    position: fixed;
-    bottom: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 10px;
-    padding: 4px 14px;
-    border-radius: 20px;
-    border: 1px solid #21262d;
-    background: #161b22;
-    white-space: nowrap;
-  }
-  #status-bar.live         { color: #3fb950; border-color: #238636; }
-  #status-bar.reconnecting { color: #d29922; }
-  #status-bar.disconnected { color: #f85149; }
-
-  /* ── legend ────────────────────────────────────────────────────── */
-  #legend {
-    position: fixed;
-    bottom: 14px;
-    right: 16px;
-    font-size: 9px;
-    color: #6e7681;
-    line-height: 1.8;
-  }
-  .leg-dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 4px;
-    vertical-align: middle;
-  }
+/* ── legend ──────────────────────────────────────────────────────── */
+#legend {
+  position: fixed; bottom: 12px; right: 16px;
+  font-size: 9px; color: var(--muted); line-height: 2; z-index: 20;
+}
+.leg-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 4px; vertical-align: middle;
+}
+.leg-line {
+  display: inline-block; width: 14px; height: 2px;
+  border-radius: 1px; margin-right: 4px; vertical-align: middle;
+}
 </style>
 </head>
 <body>
 
-<svg id="graph"></svg>
+<div id="header">
+  <div id="header-logo"><span id="logo-dot"></span>tinymesh0</div>
+  <div class="hdr-sep"></div>
+  <div id="hdr-self"  class="hdr-stat"><div class="hdr-label">mesh ip</div><div class="hdr-val">—</div></div>
+  <div id="hdr-peers" class="hdr-stat"><div class="hdr-label">peers</div><div class="hdr-val">0</div></div>
+  <div class="hdr-sep"></div>
+  <div id="hdr-tx"    class="hdr-stat"><div class="hdr-label">↑ tx rate</div><div class="hdr-val">—</div></div>
+  <div id="hdr-rx"    class="hdr-stat"><div class="hdr-label">↓ rx rate</div><div class="hdr-val">—</div></div>
+  <div id="hdr-spacer"></div>
+  <a href="/metrics" target="_blank" id="metrics-link">prometheus ↗</a>
+  <div class="hdr-sep"></div>
+  <div id="hdr-time"  class="hdr-stat"><div class="hdr-label">updated</div><div class="hdr-val">—</div></div>
+</div>
 
-<div id="panel">
-  <div id="panel-title">tinymesh0</div>
-  <div id="self-stats"><div class="row"><span>connecting…</span></div></div>
+<div id="main">
+  <svg id="graph">
+    <defs>
+      <filter id="glow-orange" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow-green" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+  </svg>
+
+  <div id="detail">
+    <button id="detail-close" onclick="closeDetail()">✕</button>
+    <div id="detail-content"></div>
+  </div>
 </div>
 
 <div id="tooltip"></div>
-
 <div id="status-bar" class="disconnected">disconnected</div>
 
 <div id="legend">
   <div><span class="leg-dot" style="background:#f0883e"></span>this node</div>
   <div><span class="leg-dot" style="background:#3fb950"></span>peer — active</div>
   <div><span class="leg-dot" style="background:#30363d"></span>peer — idle</div>
+  <div style="margin-top:4px"><span class="leg-line" style="background:#3fb950"></span>&lt; 10 ms</div>
+  <div><span class="leg-line" style="background:#d29922"></span>&lt; 50 ms</div>
+  <div><span class="leg-line" style="background:#f85149"></span>&gt; 50 ms</div>
+  <div style="margin-top:4px"><span class="leg-dot" style="background:#f0883e;width:6px;height:6px"></span>tx traffic</div>
+  <div><span class="leg-dot" style="background:#388bfd;width:6px;height:6px"></span>rx traffic</div>
 </div>
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 'use strict';
 
+// ── config ────────────────────────────────────────────────────────────────
+const PARTICLE_BASE_PPS = 0.6;   // particles/sec per connected link at zero traffic
+const PARTICLE_BW_SCALE = 4e-5;  // extra particles per byte/sec
+const PARTICLE_DURATION = 1.4;   // seconds to cross an edge end-to-end
+const MAX_PARTICLES     = 300;
+
+// ── state ─────────────────────────────────────────────────────────────────
+let topo            = { self: null, peers: [] };
+let prevTopo        = null;
+let prevTime        = null;
+let rates           = {};       // hostname → { txRate, rxRate }
+let particles       = [];       // { srcId, dstId, t, color }
+let nodeById        = {};       // id → d3 simulation node (has .x, .y after ticks)
+let selectedNode    = null;
+let simulation      = null;
+// Node objects are kept alive across renders so the force simulation retains
+// each node's x/y/vx/vy. We update their data properties in-place instead of
+// recreating them, which prevents the simulation from re-energizing on stats
+// broadcasts that don't change the graph structure.
+const persistentNodes = new Map(); // id → node object
+const persistentLinks = new Map(); // 'srcId→dstId' → link object
+let prevPeerIds       = new Set();
+
 // ── helpers ───────────────────────────────────────────────────────────────
 function fmtBytes(b) {
-  if (!b) return '0 B';
-  const u = ['B','KB','MB','GB'];
+  if (!b || b <= 0) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
   const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), u.length - 1);
-  return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
+  return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
+}
+function fmtRate(bps) {
+  if (!bps || bps <= 0) return '0 B/s';
+  const u = ['B/s','KB/s','MB/s','GB/s'];
+  const i = Math.min(Math.floor(Math.log(bps) / Math.log(1024)), u.length - 1);
+  return (bps / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
 }
 function fmtAgo(ts) {
   if (!ts) return 'never';
   const s = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (s < 0)    return 'just now';
   if (s < 60)   return s + 's ago';
   if (s < 3600) return Math.floor(s / 60) + 'm ago';
   return Math.floor(s / 3600) + 'h ago';
 }
+function latencyColor(ms) {
+  if (!ms || ms <= 0) return '#30363d';
+  if (ms < 10)  return '#3fb950';
+  if (ms < 50)  return '#d29922';
+  return '#f85149';
+}
 
-// ── D3 setup ──────────────────────────────────────────────────────────────
-const svg       = d3.select('#graph');
-const gLinks    = svg.append('g');
-const gLLbls    = svg.append('g');
-const gNodes    = svg.append('g');
+// Derive per-peer bandwidth rates from two consecutive topology snapshots.
+function computeRates(newT, oldT, dtSec) {
+  const r = {};
+  if (!oldT || dtSec <= 0) return r;
+  const oldMap = {};
+  for (const p of oldT.peers) oldMap[p.hostname] = p;
+  for (const p of newT.peers) {
+    const o = oldMap[p.hostname];
+    if (!o) continue;
+    r[p.hostname] = {
+      txRate: Math.max(0, (p.tx_bytes - o.tx_bytes) / dtSec),
+      rxRate: Math.max(0, (p.rx_bytes - o.rx_bytes) / dtSec),
+    };
+  }
+  return r;
+}
 
-let simulation  = null;
-let topo        = { self: null, peers: [] };
-const tooltip   = document.getElementById('tooltip');
+// ── D3 graph setup ────────────────────────────────────────────────────────
+const svgEl      = document.getElementById('graph');
+const svg        = d3.select(svgEl);
+const gLinks     = svg.append('g').attr('class', 'l-links');
+const gLLbls     = svg.append('g').attr('class', 'l-llbls');
+const gParticles = svg.append('g').attr('class', 'l-particles');
+const gNodes     = svg.append('g').attr('class', 'l-nodes');
 
-function w() { return window.innerWidth;  }
-function h() { return window.innerHeight; }
+const tooltip = document.getElementById('tooltip');
+
+function W() { return svgEl.clientWidth; }
+function H() { return svgEl.clientHeight; }
 
 // ── render ────────────────────────────────────────────────────────────────
 function render(newTopo) {
-  topo = newTopo;
+  const now   = Date.now();
+  const dtSec = prevTime ? (now - prevTime) / 1000 : 0;
+  rates    = computeRates(newTopo, prevTopo, dtSec);
+  prevTopo = newTopo;
+  prevTime = now;
+  topo     = newTopo;
 
-  // ── side panel
-  const self = topo.self;
-  if (self) {
-    document.getElementById('self-stats').innerHTML = `
-      <div class="row"><span>hostname</span><span>${self.hostname}</span></div>
-      <div class="row"><span>mesh ip</span><span>${self.mesh_ip}</span></div>
-      <div class="row"><span>endpoint</span><span>${self.endpoint || '—'}</span></div>
-      <div class="row"><span>peers</span><span>${topo.peers.length}</span></div>
-    `;
-  }
+  updateHeader();
 
+  const self   = topo.self;
   const selfId = self ? self.hostname : '__self__';
 
-  // Build node / link arrays
-  const nodes = [];
-  const links = [];
+  // Detect structural changes (peers added or removed) so we only re-energize
+  // the simulation when the graph topology actually changes.
+  const newPeerIds = new Set(topo.peers.map(p => p.hostname));
+  if (self) newPeerIds.add(selfId);
+  let structural = false;
+  for (const id of newPeerIds) { if (!prevPeerIds.has(id)) { structural = true; break; } }
+  if (!structural) for (const id of prevPeerIds) { if (!newPeerIds.has(id)) { structural = true; break; } }
+  prevPeerIds = newPeerIds;
 
+  // Update node objects in-place so the force simulation keeps x/y/vx/vy.
   if (self) {
-    nodes.push({ id: selfId, label: self.hostname, ip: self.mesh_ip, self: true });
+    const n = persistentNodes.get(selfId) || { id: selfId };
+    Object.assign(n, { label: self.hostname, ip: self.mesh_ip, isSelf: true });
+    persistentNodes.set(selfId, n);
   }
   for (const p of topo.peers) {
-    nodes.push({
-      id: p.hostname, label: p.hostname, ip: p.mesh_ip,
-      self: false, connected: p.connected,
-      latencyMs: p.latency_ms, rxBytes: p.rx_bytes, txBytes: p.tx_bytes,
-      lastHandshake: p.last_handshake, endpoint: p.endpoint,
+    const r = rates[p.hostname] || {};
+    const n = persistentNodes.get(p.hostname) || { id: p.hostname };
+    Object.assign(n, {
+      label:         p.hostname,
+      ip:            p.mesh_ip,
+      isSelf:        false,
+      connected:     p.connected,
+      latencyMs:     p.latency_ms,
+      rxBytes:       p.rx_bytes,
+      txBytes:       p.tx_bytes,
+      lastHandshake: p.last_handshake,
+      endpoint:      p.endpoint,
+      txRate:        r.txRate || 0,
+      rxRate:        r.rxRate || 0,
     });
-    links.push({
-      source: selfId, target: p.hostname,
-      connected: p.connected, latencyMs: p.latency_ms,
-    });
+    persistentNodes.set(p.hostname, n);
+
+    // Reuse the same link object so the D3 key is stable after the force
+    // simulation mutates source/target from strings to node references.
+    const mapKey = `${selfId}→${p.hostname}`;
+    const lnk = persistentLinks.get(mapKey) || { source: selfId, target: p.hostname };
+    lnk.connected  = p.connected;
+    lnk.latencyMs  = p.latency_ms;
+    persistentLinks.set(mapKey, lnk);
   }
+  // Remove objects for peers that have left.
+  for (const id of persistentNodes.keys()) {
+    if (!newPeerIds.has(id)) persistentNodes.delete(id);
+  }
+  for (const key of persistentLinks.keys()) {
+    const dstId = key.split('→')[1];
+    if (!newPeerIds.has(dstId)) persistentLinks.delete(key);
+  }
+  const nodes = [...persistentNodes.values()];
+  const links = [...persistentLinks.values()];
 
   // ── links
-  const linkSel = gLinks.selectAll('line.link')
-    .data(links, d => d.source + '→' + d.target);
+  const linkSel = gLinks.selectAll('line.link').data(links, d => d.source + '→' + d.target);
 
   linkSel.enter().append('line').attr('class', 'link')
+    .style('fill', 'none')
     .merge(linkSel)
-    .attr('class', d => 'link' + (d.connected ? ' connected' : ''));
+    .style('stroke',       d => latencyColor(d.latencyMs))
+    .style('stroke-width', d => d.connected ? 2 : 1)
+    .style('opacity',      d => d.connected ? 0.75 : 0.25);
 
   linkSel.exit().remove();
 
-  // ── link labels
-  const llSel = gLLbls.selectAll('text.link-label')
+  // ── link labels (latency)
+  const llSel = gLLbls.selectAll('text.ll')
     .data(links.filter(l => l.latencyMs > 0), d => d.source + '→' + d.target);
 
-  llSel.enter().append('text').attr('class', 'link-label')
+  llSel.enter().append('text').attr('class', 'll')
+    .style('font-size', '9px').style('text-anchor', 'middle').style('pointer-events', 'none')
     .merge(llSel)
+    .style('fill', d => latencyColor(d.latencyMs))
     .text(d => d.latencyMs.toFixed(1) + ' ms');
 
   llSel.exit().remove();
 
   // ── nodes
-  const nodeSel = gNodes.selectAll('g.node')
-    .data(nodes, d => d.id);
+  const nodeSel = gNodes.selectAll('g.node').data(nodes, d => d.id);
 
-  const nodeEnter = nodeSel.enter().append('g').attr('class', 'node')
+  const entered = nodeSel.enter().append('g').attr('class', 'node')
+    .style('cursor', 'pointer')
     .call(d3.drag()
       .on('start', (ev, d) => { if (!ev.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
       .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
       .on('end',   (ev, d) => { if (!ev.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
 
-  nodeEnter.append('circle').attr('r', d => d.self ? 22 : 17);
-  nodeEnter.append('text').attr('class', 'node-label').attr('dy', '-0.15em');
-  nodeEnter.append('text').attr('class', 'node-ip').attr('dy', '1.2em');
+  // glow ring (pulsing for self)
+  entered.append('circle').attr('class', 'node-glow')
+    .attr('r', d => d.isSelf ? 30 : 24)
+    .style('fill', 'none').style('stroke-width', 8).style('pointer-events', 'none');
 
-  // Tooltip on hover
-  nodeEnter.on('mouseenter', (ev, d) => {
-    if (d.self) return;
-    tooltip.style.display = 'block';
-    tooltip.innerHTML = `
-      <div class="t-hostname">${d.label}.mesh</div>
-      <div class="t-row">mesh ip   <span>${d.ip}</span></div>
-      <div class="t-row">endpoint  <span>${d.endpoint || '—'}</span></div>
-      <div class="t-row">latency   <span>${d.latencyMs ? d.latencyMs.toFixed(1)+' ms' : 'n/a'}</span></div>
-      <div class="t-row">↑ sent    <span>${fmtBytes(d.txBytes)}</span></div>
-      <div class="t-row">↓ recv    <span>${fmtBytes(d.rxBytes)}</span></div>
-      <div class="t-row">handshake <span>${fmtAgo(d.lastHandshake)}</span></div>
-    `;
-  }).on('mousemove', ev => {
-    tooltip.style.left = (ev.clientX + 14) + 'px';
-    tooltip.style.top  = (ev.clientY - 10) + 'px';
-  }).on('mouseleave', () => {
-    tooltip.style.display = 'none';
-  });
+  // main body
+  entered.append('circle').attr('class', 'node-body')
+    .attr('r', d => d.isSelf ? 22 : 17)
+    .style('stroke-width', 2);
 
-  // Merge + update all nodes
-  const nodeAll = nodeSel.merge(nodeEnter);
+  // hostname label
+  entered.append('text').attr('class', 'node-lbl')
+    .attr('dy', '-0.2em')
+    .style('font-size', '11px').style('text-anchor', 'middle')
+    .style('dominant-baseline', 'middle').style('pointer-events', 'none')
+    .style('fill', '#e6edf3');
 
-  nodeAll.select('circle')
-    .attr('class', d => 'node-circle ' + (d.self ? 'self' : d.connected ? 'connected' : 'peer'));
+  // IP label
+  entered.append('text').attr('class', 'node-ip')
+    .attr('dy', '1.2em')
+    .style('font-size', '9px').style('text-anchor', 'middle')
+    .style('dominant-baseline', 'hanging').style('pointer-events', 'none')
+    .style('fill', '#8b949e');
 
-  nodeAll.select('text.node-label').text(d => d.label);
+  // events
+  entered
+    .on('mouseenter', (ev, d) => {
+      if (d.isSelf) return;
+      tooltip.style.display = 'block';
+      const r = rates[d.id] || {};
+      tooltip.innerHTML = `
+        <div class="t-hostname">${d.label}.mesh</div>
+        <div class="t-row">mesh ip   <span>${d.ip}</span></div>
+        <div class="t-row">endpoint  <span>${d.endpoint || '—'}</span></div>
+        <div class="t-row">latency   <span>${d.latencyMs ? d.latencyMs.toFixed(1)+' ms' : 'n/a'}</span></div>
+        <div class="t-row">↑ tx rate <span>${fmtRate(r.txRate)}</span></div>
+        <div class="t-row">↓ rx rate <span>${fmtRate(r.rxRate)}</span></div>
+        <div class="t-row">handshake <span>${fmtAgo(d.lastHandshake)}</span></div>
+      `;
+    })
+    .on('mousemove', ev => {
+      tooltip.style.left = (ev.clientX + 14) + 'px';
+      tooltip.style.top  = (ev.clientY - 10) + 'px';
+    })
+    .on('mouseleave', () => { tooltip.style.display = 'none'; })
+    .on('click', (ev, d) => { ev.stopPropagation(); if (!d.isSelf) openDetail(d); });
+
+  const nodeAll = nodeSel.merge(entered);
+
+  nodeAll.select('circle.node-glow')
+    .style('stroke', d => d.isSelf ? '#f0883e' : d.connected ? '#3fb950' : '#30363d')
+    .style('opacity', d => d.isSelf ? null : d.connected ? 0.12 : 0.06)
+    .attr('class', d => 'node-glow' + (d.isSelf ? ' self-pulse' : ''));
+
+  nodeAll.select('circle.node-body')
+    .style('fill',   d => d.isSelf ? '#c9610a' : d.connected ? '#1a3a27' : '#1c2d3e')
+    .style('stroke', d => d.isSelf ? '#f0883e' : d.connected ? '#3fb950' : '#30363d')
+    .style('filter', d => d.isSelf ? 'url(#glow-orange)' : d.connected ? 'url(#glow-green)' : 'none');
+
+  nodeAll.select('text.node-lbl').text(d => d.label);
   nodeAll.select('text.node-ip').text(d => d.ip);
 
   nodeSel.exit().remove();
 
-  // ── simulation
+  // ── force simulation
   if (!simulation) {
     simulation = d3.forceSimulation()
-      .force('link',      d3.forceLink().id(d => d.id).distance(150))
-      .force('charge',    d3.forceManyBody().strength(-400))
-      .force('center',    d3.forceCenter(w() / 2, h() / 2))
-      .force('collision', d3.forceCollide(50))
+      .force('link',      d3.forceLink().id(d => d.id).distance(170))
+      .force('charge',    d3.forceManyBody().strength(-700))
+      .force('center',    d3.forceCenter(W() / 2, H() / 2))
+      .force('collision', d3.forceCollide(58))
       .on('tick', tick);
+    structural = true;
   }
-
   simulation.nodes(nodes);
   simulation.force('link').links(links);
-  simulation.alpha(0.4).restart();
+  // Only re-energize on structural changes. Stats-only updates (byte counters,
+  // latency) update node objects in-place above; the settled simulation doesn't
+  // need to move and won't flicker.
+  if (structural) simulation.alpha(0.4).restart();
+
+  // rebuild lookup for particle positioning
+  nodeById = {};
+  for (const n of simulation.nodes()) nodeById[n.id] = n;
+
+  // refresh detail panel if open
+  if (selectedNode) {
+    const updated = nodes.find(n => n.id === selectedNode.id);
+    if (updated) openDetail(updated);
+  }
+}
+
+function updateHeader() {
+  const self = topo.self;
+  document.querySelector('#hdr-self  .hdr-val').textContent = self ? self.mesh_ip : '—';
+  document.querySelector('#hdr-peers .hdr-val').textContent = topo.peers.length;
+
+  let totalTx = 0, totalRx = 0;
+  for (const r of Object.values(rates)) { totalTx += r.txRate || 0; totalRx += r.rxRate || 0; }
+  document.querySelector('#hdr-tx .hdr-val').textContent = fmtRate(totalTx);
+  document.querySelector('#hdr-rx .hdr-val').textContent = fmtRate(totalRx);
+  document.querySelector('#hdr-time .hdr-val').textContent = new Date().toLocaleTimeString();
 }
 
 function tick() {
@@ -313,13 +519,126 @@ function tick() {
     .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
     .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
 
-  gLLbls.selectAll('text.link-label')
+  gLLbls.selectAll('text.ll')
     .attr('x', d => (d.source.x + d.target.x) / 2)
     .attr('y', d => (d.source.y + d.target.y) / 2 - 8);
 
-  gNodes.selectAll('g.node')
-    .attr('transform', d => `translate(${d.x},${d.y})`);
+  gNodes.selectAll('g.node').attr('transform', d => `translate(${d.x},${d.y})`);
 }
+
+// ── self-node pulse animation (CSS handles it via class) ──────────────────
+const styleTag = document.createElement('style');
+styleTag.textContent = `
+  .self-pulse { animation: self-ring-pulse 2s ease-in-out infinite; }
+  @keyframes self-ring-pulse {
+    0%, 100% { opacity: 0.15; r: 30; }
+    50%       { opacity: 0.35; r: 34; }
+  }
+`;
+document.head.appendChild(styleTag);
+
+// ── particle system ───────────────────────────────────────────────────────
+let lastElapsed = 0;
+
+function spawnParticles(dt) {
+  if (particles.length >= MAX_PARTICLES) return;
+  const linkData = gLinks.selectAll('line.link').data();
+
+  for (const link of linkData) {
+    if (!link.connected) continue;
+
+    const srcId = typeof link.source === 'object' ? link.source.id : link.source;
+    const dstId = typeof link.target === 'object' ? link.target.id : link.target;
+    const r = rates[dstId] || {};
+
+    // TX: self → peer (orange)
+    const txPPS = PARTICLE_BASE_PPS + (r.txRate || 0) * PARTICLE_BW_SCALE;
+    if (particles.length < MAX_PARTICLES && Math.random() < txPPS * dt) {
+      particles.push({ srcId, dstId, t: 0, color: '#f0883e' });
+    }
+
+    // RX: peer → self (blue) — reversed direction
+    const rxPPS = PARTICLE_BASE_PPS + (r.rxRate || 0) * PARTICLE_BW_SCALE;
+    if (particles.length < MAX_PARTICLES && Math.random() < rxPPS * dt) {
+      particles.push({ srcId: dstId, dstId: srcId, t: 0, color: '#388bfd' });
+    }
+  }
+}
+
+const particleTimer = d3.timer(elapsed => {
+  const dt = Math.min((elapsed - lastElapsed) / 1000, 0.1); // seconds, capped
+  lastElapsed = elapsed;
+
+  spawnParticles(dt);
+
+  const speed = 1 / PARTICLE_DURATION;
+  for (const p of particles) p.t += speed * dt;
+  particles = particles.filter(p => p.t < 1);
+
+  const sel = gParticles.selectAll('circle.pt').data(particles);
+
+  sel.enter().append('circle').attr('class', 'pt')
+    .attr('r', 3).style('pointer-events', 'none')
+    .merge(sel)
+    .attr('cx', p => {
+      const s = nodeById[p.srcId], d = nodeById[p.dstId];
+      return (s && d && s.x != null) ? s.x + (d.x - s.x) * p.t : -999;
+    })
+    .attr('cy', p => {
+      const s = nodeById[p.srcId], d = nodeById[p.dstId];
+      return (s && d && s.y != null) ? s.y + (d.y - s.y) * p.t : -999;
+    })
+    .style('fill', p => p.color)
+    .style('opacity', p => {
+      const fade = 0.12;
+      if (p.t < fade)     return p.t / fade;
+      if (p.t > 1 - fade) return (1 - p.t) / fade;
+      return 0.88;
+    });
+
+  sel.exit().remove();
+});
+
+// ── detail panel ──────────────────────────────────────────────────────────
+function openDetail(d) {
+  selectedNode = d;
+  const r      = rates[d.id] || {};
+  const maxBW  = 1e6; // 1 MB/s reference for bar fill
+  const txPct  = Math.min((r.txRate || 0) / maxBW * 100, 100).toFixed(1);
+  const rxPct  = Math.min((r.rxRate || 0) / maxBW * 100, 100).toFixed(1);
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="detail-hostname">${d.label}<span style="color:var(--muted)">.mesh</span></div>
+    <div class="detail-sub">${d.ip}</div>
+
+    <div class="detail-section">connection</div>
+    <div class="detail-row"><span>status</span>
+      <span><span class="badge ${d.connected ? 'connected' : 'idle'}">${d.connected ? 'connected' : 'idle'}</span></span></div>
+    <div class="detail-row"><span>endpoint</span><span>${d.endpoint || '—'}</span></div>
+    <div class="detail-row"><span>latency</span>
+      <span style="color:${latencyColor(d.latencyMs)}">${d.latencyMs ? d.latencyMs.toFixed(2)+' ms' : '—'}</span></div>
+    <div class="detail-row"><span>handshake</span><span>${fmtAgo(d.lastHandshake)}</span></div>
+
+    <div class="detail-section">live bandwidth</div>
+    <div class="bw-label"><span>↑ tx rate</span><span>${fmtRate(r.txRate)}</span></div>
+    <div class="bw-track"><div class="bw-fill tx" style="width:${txPct}%"></div></div>
+    <div class="bw-label" style="margin-top:8px"><span>↓ rx rate</span><span>${fmtRate(r.rxRate)}</span></div>
+    <div class="bw-track"><div class="bw-fill rx" style="width:${rxPct}%"></div></div>
+
+    <div class="detail-section">totals</div>
+    <div class="detail-row"><span>total sent</span><span>${fmtBytes(d.txBytes)}</span></div>
+    <div class="detail-row"><span>total recv</span><span>${fmtBytes(d.rxBytes)}</span></div>
+  `;
+
+  document.getElementById('detail').classList.add('open');
+}
+
+function closeDetail() {
+  selectedNode = null;
+  document.getElementById('detail').classList.remove('open');
+}
+
+svgEl.addEventListener('click', () => closeDetail());
 
 // ── SSE connection ────────────────────────────────────────────────────────
 const bar = document.getElementById('status-bar');
@@ -332,7 +651,7 @@ function connect() {
       render(JSON.parse(ev.data));
       bar.textContent = 'live · ' + new Date().toLocaleTimeString();
       bar.className   = 'live';
-    } catch (e) { console.error('parse error', e); }
+    } catch (e) { console.error('topology parse error', e); }
   });
 
   es.onerror = () => {
@@ -345,7 +664,7 @@ function connect() {
 
 window.addEventListener('resize', () => {
   if (simulation) {
-    simulation.force('center', d3.forceCenter(w() / 2, h() / 2));
+    simulation.force('center', d3.forceCenter(W() / 2, H() / 2));
     simulation.alpha(0.1).restart();
   }
 });
