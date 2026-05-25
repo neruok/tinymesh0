@@ -35,12 +35,12 @@ Enforce per-node allow/deny rules at the WireGuard interface using iptables. Bec
 
 Each node runs a lightweight DNS resolver on the WireGuard interface. Hostname → mesh IP mappings come from gossip state, so `curl http://node-b.mesh` works from any node without `/etc/hosts` changes.
 
-- [ ] Implement DNS server (`internal/dns/`) using `github.com/miekg/dns`
-- [ ] Bind to the node's mesh IP on port 53 (UDP + TCP)
-- [ ] Resolve `<hostname>.mesh` → peer's mesh IP from gossip membership
-- [ ] Handle negative responses (NXDOMAIN) for unknown hostnames
-- [ ] Update `/etc/resolv.conf` on the host (or document manual step) to point `.mesh` queries at the local resolver
-- [ ] Add `tinymesh0d dns list` to show current hostname → IP table
+- [x] Implement DNS server (`internal/dns/`) using `github.com/miekg/dns`
+- [x] Bind to the node's mesh IP on port 53 (UDP + TCP)
+- [x] Resolve `<hostname>.mesh` → peer's mesh IP from gossip membership
+- [x] Handle negative responses (NXDOMAIN) for unknown hostnames
+- [x] Update `/etc/resolv.conf` on the host (or document manual step) to point `.mesh` queries at the local resolver
+- [x] Add `tinymesh0d dns list` to show current hostname → IP table
 
 ---
 
@@ -48,15 +48,15 @@ Each node runs a lightweight DNS resolver on the WireGuard interface. Hostname �
 
 A live graph rendered in the browser showing nodes, active tunnels, per-link latency, and bandwidth. Served directly by each daemon.
 
-- [ ] Add `/api/topology` HTTP endpoint returning current membership + WireGuard stats as JSON
-- [ ] Add `/api/stream` WebSocket endpoint that pushes membership events and metric updates in real time
-- [ ] Implement periodic latency probes (ICMP ping across mesh IPs) and feed results into the stream
-- [ ] Build single-page UI (`ui/`) using D3.js force-directed graph:
+- [x] Add `/api/topology` HTTP endpoint returning current membership + WireGuard stats as JSON
+- [x] Add `/api/stream` SSE endpoint that pushes topology events in real time
+- [x] Implement periodic latency probes (ICMP ping across mesh IPs) and feed results into the stream
+- [x] Build single-page UI (`ui/`) using D3.js force-directed graph:
   - Nodes labelled with hostname + mesh IP
-  - Edges labelled with latency (ms) and bandwidth (B/s)
-  - Nodes pulse green on join, fade red on leave
-- [ ] Serve the UI as embedded static assets from the daemon binary (`//go:embed`)
-- [ ] Add `tinymesh0d status --web` flag to open the UI in a browser automatically
+  - Edges labelled with latency (ms); hover shows bandwidth + handshake age
+  - Node colour reflects connection state (orange=self, green=active, dark=idle)
+- [x] Serve the UI as embedded static assets from the daemon binary (`//go:embed`)
+- [x] Add `tinymesh0d status --web` flag to open the UI in a browser automatically
 
 ---
 

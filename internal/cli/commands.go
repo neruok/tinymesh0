@@ -1,13 +1,16 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 
+	"github.com/jakenoc/tinymesh0/internal/dns"
 	"github.com/jakenoc/tinymesh0/internal/wireguard"
 )
 
@@ -61,6 +64,46 @@ func RunPolicyList() error {
 		return fmt.Errorf("reading policy chain — is tinymesh0d running with a policy configured?\n%s", strings.TrimSpace(string(out)))
 	}
 	fmt.Print(string(out))
+	return nil
+}
+
+// RunStatusWeb prints the topology UI URL and attempts to open it in the
+// default browser. addr should be the host:port the daemon is listening on.
+func RunStatusWeb(addr string) error {
+	url := "http://" + addr
+	fmt.Printf("topology UI: %s\n", url)
+	var cmd string
+	switch runtime.GOOS {
+	case "linux":
+		cmd = "xdg-open"
+	case "darwin":
+		cmd = "open"
+	default:
+		return nil
+	}
+	if opener, err := exec.LookPath(cmd); err == nil {
+		return exec.Command(opener, url).Start()
+	}
+	return nil // browser opener not available; URL already printed
+}
+
+func RunDNSList() error {
+	data, err := os.ReadFile(dns.StateFile)
+	if err != nil {
+		return fmt.Errorf("reading dns state (is tinymesh0d running?): %w", err)
+	}
+	var entries []dns.PeerEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("parsing dns state: %w", err)
+	}
+	if len(entries) == 0 {
+		fmt.Println("no mesh peers known")
+		return nil
+	}
+	fmt.Printf("%-24s  %s\n", "HOSTNAME", "MESH IP")
+	for _, e := range entries {
+		fmt.Printf("%-24s  %s\n", e.Hostname+".mesh", e.MeshIP)
+	}
 	return nil
 }
 

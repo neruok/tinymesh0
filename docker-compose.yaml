@@ -6,6 +6,8 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    ports:
+      - "8080:8080"
     volumes:
       - ./configs/node-a.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys/node-a.key:/etc/tinymesh0/private.key:ro

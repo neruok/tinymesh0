@@ -151,6 +151,8 @@ gossip: peer joined — node-b  mesh=100.117.163.169  endpoint=198.51.100.9:5182
 | `tinymesh0d keygen` | Generate a new WireGuard keypair |
 | `tinymesh0d policy list` | Print the active iptables policy chain |
 | `tinymesh0d policy reload` | Signal the running daemon to reload policy from config (SIGHUP) |
+| `tinymesh0d dns list` | Show the hostname → mesh IP table |
+| `tinymesh0d status --web` | Open the topology UI in a browser |
 
 ---
 
@@ -272,6 +274,150 @@ The "deferring rule" line is expected — hostname-based rules are skipped until
 
 ---
 
+## Mesh DNS
+
+Each node runs an authoritative DNS resolver for the `.mesh` zone, bound to its own mesh IP on port 53 (UDP + TCP). Hostname-to-IP mappings are sourced directly from gossip state: when a peer joins, its entry is added instantly; when it leaves, the entry is removed.
+
+No config changes are required — the DNS server starts automatically with `tinymesh0d up`.
+
+### Automatic resolver configuration
+
+The daemon manages `/etc/resolv.conf` automatically:
+
+1. **At startup** — reads the current nameservers from `/etc/resolv.conf` and stores them as forwarding upstreams, then replaces the file with a single `nameserver <mesh-ip>` line.
+2. **At shutdown** — restores the original `/etc/resolv.conf`.
+
+This means `.mesh` names resolve without any `@server` flag, and non-`.mesh` queries (container names, public internet) are transparently forwarded to whatever resolver was configured before. No manual step is required.
+
+Startup log lines confirm both actions:
+
+```
+mesh dns listening on 100.75.167.232:53 (forwarding to [127.0.0.11:53])
+mesh dns: set /etc/resolv.conf nameserver to 100.75.167.232 (restoring on shutdown)
+```
+
+> **Note:** On systems running `systemd-resolved` (most Ubuntu/Debian installations), `/etc/resolv.conf` is a symlink managed by the system — writes to it may be ignored or overwritten. Use `resolvectl dns tinymesh0 <mesh-ip>` and `resolvectl domain tinymesh0 mesh` to confine `.mesh` queries to the interface instead.
+
+### Verify DNS resolution and forwarding
+
+No manual resolver configuration is needed. After `make dev`, the daemon sets `/etc/resolv.conf` automatically.
+
+```bash
+# 1. Show known hostname → IP mappings
+docker exec node-b tinymesh0d dns list
+
+# 2. Resolve a peer's mesh name — no @ flag required
+docker exec node-b dig node-a.mesh
+
+# 3. Confirm forwarding: non-.mesh names still resolve
+docker exec node-b dig google.com
+
+# 4. Confirm Docker container names still resolve (forwarded to 127.0.0.11)
+docker exec node-b dig node-a
+
+# 5. Use mesh names directly in commands
+docker exec node-b ping node-a.mesh
+docker exec node-b curl http://node-a.mesh:8080
+```
+
+Expected `dns list` output:
+
+```
+HOSTNAME                  MESH IP
+node-a.mesh               100.75.167.232
+node-b.mesh               100.117.163.169
+```
+
+Expected `dig node-a.mesh` output (no `@` needed after resolv.conf update):
+
+```
+;; ANSWER SECTION:
+node-a.mesh.		60	IN	A	100.75.167.232
+```
+
+Expected `dig google.com` output (forwarded to upstream, returns real answer):
+
+```
+;; ANSWER SECTION:
+google.com.		300	IN	A	142.250.80.46
+```
+
+### How it works
+
+The DNS server registers two handlers in the `miekg/dns` mux, which routes by longest matching zone:
+
+| Zone | Handler | Behaviour |
+|---|---|---|
+| `mesh.` | authoritative | Returns an `A` record from the gossip peer table (TTL 60 s) |
+| `.` (catch-all) | forwarding | Proxies the query to upstream resolvers; retries over TCP if the UDP response is truncated |
+
+Unknown `.mesh` names return `NXDOMAIN`. Non-`A` queries for known `.mesh` names return `NODATA`. All other queries are forwarded.
+
+The state file at `/var/run/tinymesh0d-dns.json` is rewritten on every peer join/leave and is what `tinymesh0d dns list` reads.
+
+---
+
+## Topology UI
+
+Each daemon serves a live network graph at `http://<node-addr>:8080`. The UI is a single embedded HTML page — no external files, no install step.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  tinymesh0                                              │
+│  hostname  node-a                    ●  node-a          │
+│  mesh ip   100.75.167.232           /  (self)           │
+│  endpoint  203.0.113.5:51820    3.1 ms                  │
+│  peers     1                       \                    │
+│                                     ●  node-b (active)  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**What it shows:**
+
+| Element | Meaning |
+|---|---|
+| Orange node | This node |
+| Green node | Peer with an active WireGuard handshake (< 5 min ago) |
+| Dark node | Peer known via gossip but not yet connected |
+| Edge label | Round-trip latency from ICMP probe (updated every 10 s) |
+| Hover tooltip | Endpoint, latency, bytes sent/received, handshake age |
+
+**Access the UI:**
+
+The server listens on `0.0.0.0:8080` by default, so it is reachable on any interface. Open it in a browser:
+
+```bash
+# From a browser on your local machine (when port 8080 is reachable)
+open http://<node-ip>:8080
+
+# Or use the CLI shortcut (prints the URL and attempts to open the browser)
+tinymesh0d status --web
+
+# Override the default address if the daemon uses a different port
+tinymesh0d status --web --addr <host>:8080
+```
+
+**Configure the listen address:**
+
+```yaml
+# tinymesh0.yaml
+topology:
+  listen-addr: "0.0.0.0:8080"   # default
+  # listen-addr: ""             # set empty to disable the UI entirely
+```
+
+**API endpoints:**
+
+| Endpoint | Description |
+|---|---|
+| `GET /` | Embedded D3.js topology UI |
+| `GET /api/topology` | JSON snapshot of self + peers with WireGuard stats |
+| `GET /api/stream` | SSE stream — emits a `topology` event on every state change |
+
+The SSE stream sends an initial `topology` event on connect so the UI renders immediately without waiting for a peer join/leave event.
+
+---
+
 ## Roadmap
 
 | Phase | Status | Description |
@@ -279,22 +425,26 @@ The "deferring rule" line is expected — hostname-based rules are skipped until
 | 1 — Core tunnel | ✅ Done | WireGuard interface management, STUN discovery |
 | 2 — Gossip | ✅ Done | SWIM-based peer discovery, dynamic WireGuard config, no static peers |
 | 3 — Policy engine | ✅ Done | Per-node allow/deny rules enforced via iptables, live reload via SIGHUP |
-| 4 — Mesh DNS | 📋 Planned | Resolve `<hostname>.mesh` to peer mesh IPs |
-| 5 — Topology UI | 📋 Planned | Live network graph via WebSocket + D3.js |
+| 4 — Mesh DNS | ✅ Done | Authoritative `.mesh` resolver on each node; hostname → IP from gossip |
+| 5 — Topology UI | ✅ Done | Live D3.js graph; SSE stream; ICMP latency probes; embedded binary assets |
 
 ---
 
 ## Architecture
 
 ```
-tinymeshd
+tinymesh0
 ├── cmd/tinymesh0d/       CLI entry point (cobra)
 ├── internal/
+│   ├── cli/              CLI command implementations (down, status, dns list, …)
 │   ├── config/           YAML config loader
+│   ├── dns/              Authoritative .mesh DNS resolver (miekg/dns)
 │   ├── gossip/           SWIM-based peer discovery (memberlist)
 │   ├── ipam/             Deterministic mesh IP assignment
 │   ├── policy/           iptables policy engine (allow/deny rules)
 │   ├── stun/             STUN client (RFC 5389, from scratch)
+│   ├── tm0d/             Daemon lifecycle (startup, shutdown, subsystem wiring)
+│   ├── topology/         HTTP topology server + embedded D3 UI
 │   └── wireguard/        Interface lifecycle via wgctrl + netlink
 └── scripts/              Development utilities
 ```

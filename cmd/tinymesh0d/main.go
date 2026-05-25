@@ -18,6 +18,7 @@ func main() {
 	}
 
 	var cfgFile string
+	var webAddr string
 
 	upCmd := &cobra.Command{
 		Use:   "up",
@@ -36,13 +37,19 @@ func main() {
 		},
 	}
 
+	var openWeb bool
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show tinymesh0 interface status",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if openWeb {
+				return commands.RunStatusWeb(webAddr)
+			}
 			return commands.RunStatus()
 		},
 	}
+	statusCmd.Flags().BoolVar(&openWeb, "web", false, "open the topology UI in a browser")
+	statusCmd.Flags().StringVar(&webAddr, "addr", "localhost:8080", "topology UI address (host:port)")
 
 	keygenCmd := &cobra.Command{
 		Use:   "keygen",
@@ -79,7 +86,21 @@ func main() {
 		},
 	)
 
-	root.AddCommand(upCmd, downCmd, statusCmd, keygenCmd, policyCmd)
+	dnsCmd := &cobra.Command{
+		Use:   "dns",
+		Short: "Inspect mesh DNS state",
+	}
+	dnsCmd.AddCommand(
+		&cobra.Command{
+			Use:   "list",
+			Short: "Show the hostname → mesh IP table",
+			RunE: func(_ *cobra.Command, _ []string) error {
+				return commands.RunDNSList()
+			},
+		},
+	)
+
+	root.AddCommand(upCmd, downCmd, statusCmd, keygenCmd, policyCmd, dnsCmd)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}

@@ -12,10 +12,12 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	"github.com/jakenoc/tinymesh0/internal/config"
+	"github.com/jakenoc/tinymesh0/internal/dns"
 	"github.com/jakenoc/tinymesh0/internal/gossip"
 	"github.com/jakenoc/tinymesh0/internal/ipam"
 	"github.com/jakenoc/tinymesh0/internal/policy"
 	"github.com/jakenoc/tinymesh0/internal/stun"
+	"github.com/jakenoc/tinymesh0/internal/topology"
 	"github.com/jakenoc/tinymesh0/internal/wireguard"
 )
 
@@ -79,6 +81,12 @@ func (d *Daemon) Run() error {
 		defer stopReloader()
 	}
 
+	dnsSrv, stopDNS := d.startDNS(cfg, meshIP)
+	defer stopDNS()
+
+	topoSrv, stopTopo := d.startTopology(cfg, pubKey.String(), publicEndpoint, meshIP, wgMgr)
+	defer stopTopo()
+
 	gossipMgr, err := gossip.NewManager(
 		gossip.Config{
 			NodeName:       cfg.Hostname,
@@ -93,7 +101,7 @@ func (d *Daemon) Run() error {
 			Endpoint:  publicEndpoint,
 			Policies:  cfg.Policy.Rules,
 		},
-		&wgSyncer{mgr: wgMgr, policy: policyEngine},
+		&wgSyncer{mgr: wgMgr, policy: policyEngine, dns: dnsSrv, topo: topoSrv},
 	)
 	if err != nil {
 		return fmt.Errorf("starting gossip: %w", err)
@@ -218,11 +226,55 @@ func policyDefaultLabel(s string) string {
 	return "allow"
 }
 
-// wgSyncer adapts wireguard.Manager (and optionally policy.Engine) to the
-// gossip.PeerSyncer interface.
+// startTopology starts the HTTP topology server.
+// Returns nil server and a no-op stop function if the address is empty or
+// the server cannot bind.
+func (d *Daemon) startTopology(
+	cfg *config.Config,
+	pubKey, endpoint string,
+	meshIP net.IP,
+	wgMgr *wireguard.Manager,
+) (*topology.Server, func()) {
+	if cfg.Topology.ListenAddr == "" {
+		return nil, func() {}
+	}
+	srv := topology.New(topology.NodeInfo{
+		Hostname:  cfg.Hostname,
+		MeshIP:    meshIP.String(),
+		PublicKey: pubKey,
+		Endpoint:  endpoint,
+	}, wgMgr)
+	stopTopo, err := srv.Start(cfg.Topology.ListenAddr)
+	if err != nil {
+		fmt.Printf("topology ui: failed to start (%v) — ui disabled\n", err)
+		return nil, func() {}
+	}
+	fmt.Printf("topology ui  : http://%s\n", cfg.Topology.ListenAddr)
+	return srv, stopTopo
+}
+
+// startDNS starts the mesh DNS server on the node's own mesh IP.
+// If the server cannot bind (e.g. port 53 in use), a warning is printed and
+// a no-op stop function is returned so the daemon continues without DNS.
+func (d *Daemon) startDNS(cfg *config.Config, meshIP net.IP) (*dns.Server, func()) {
+	srv := dns.New(cfg.Hostname, meshIP, cfg.DNS.UpstreamServers)
+	listenAddr := fmt.Sprintf("%s:53", meshIP)
+	stopDNS, err := srv.Start(listenAddr)
+	if err != nil {
+		fmt.Printf("mesh dns: failed to start (%v) — dns disabled\n", err)
+		return nil, func() {}
+	}
+	fmt.Printf("mesh dns listening on %s (forwarding to %v)\n", listenAddr, srv.Upstreams())
+	return srv, stopDNS
+}
+
+// wgSyncer adapts wireguard.Manager (and optionally policy.Engine, dns.Server,
+// and topology.Server) to the gossip.PeerSyncer interface.
 type wgSyncer struct {
 	mgr    *wireguard.Manager
-	policy *policy.Engine // nil when no policy is configured
+	policy *policy.Engine   // nil when no policy is configured
+	dns    *dns.Server      // nil when dns failed to start
+	topo   *topology.Server // nil when topology is disabled
 }
 
 func (s *wgSyncer) SyncPeer(pubKey wgtypes.Key, meshIP net.IP, endpoint *net.UDPAddr, hostname string) error {
@@ -238,6 +290,16 @@ func (s *wgSyncer) SyncPeer(pubKey wgtypes.Key, meshIP net.IP, endpoint *net.UDP
 			fmt.Printf("policy: failed to add peer %s: %v\n", hostname, err)
 		}
 	}
+	if s.dns != nil {
+		s.dns.AddPeer(hostname, meshIP)
+	}
+	if s.topo != nil {
+		endpointStr := ""
+		if endpoint != nil {
+			endpointStr = endpoint.String()
+		}
+		s.topo.AddPeer(hostname, meshIP.String(), endpointStr)
+	}
 	return nil
 }
 
@@ -246,6 +308,12 @@ func (s *wgSyncer) RemovePeer(pubKey wgtypes.Key, hostname string) error {
 		if err := s.policy.RemovePeer(hostname); err != nil {
 			fmt.Printf("policy: failed to remove peer %s: %v\n", hostname, err)
 		}
+	}
+	if s.dns != nil {
+		s.dns.RemovePeer(hostname)
+	}
+	if s.topo != nil {
+		s.topo.RemovePeer(hostname)
 	}
 	return s.mgr.RemovePeer(pubKey)
 }

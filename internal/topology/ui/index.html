@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tinymesh0 — topology</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'SF Mono', 'Consolas', 'Liberation Mono', monospace;
+    overflow: hidden;
+  }
+
+  svg { display: block; width: 100vw; height: 100vh; }
+
+  .link {
+    stroke: #30363d;
+    stroke-width: 1.5;
+    fill: none;
+  }
+  .link.connected {
+    stroke: #388bfd;
+    stroke-width: 2;
+    stroke-dasharray: none;
+  }
+
+  .node-circle {
+    stroke-width: 2;
+    cursor: grab;
+  }
+  .node-circle:active { cursor: grabbing; }
+
+  .node-circle.self   { fill: #c9610a; stroke: #f0883e; }
+  .node-circle.peer   { fill: #1c2d3e; stroke: #30363d; }
+  .node-circle.connected { fill: #1a3a27; stroke: #3fb950; }
+
+  .node-label {
+    font-size: 11px;
+    fill: #e6edf3;
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+  .node-ip {
+    font-size: 9px;
+    fill: #8b949e;
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: hanging;
+  }
+
+  .link-label {
+    font-size: 9px;
+    fill: #6e7681;
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  /* ── side panel ────────────────────────────────────────────────── */
+  #panel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px 20px;
+    min-width: 240px;
+    max-width: 300px;
+    font-size: 11px;
+  }
+  #panel-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: #f0883e;
+    margin-bottom: 12px;
+    letter-spacing: 0.06em;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 0;
+    color: #8b949e;
+  }
+  .row span:last-child { color: #e6edf3; text-align: right; word-break: break-all; }
+
+  /* ── hover tooltip ─────────────────────────────────────────────── */
+  #tooltip {
+    position: fixed;
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 10px;
+    pointer-events: none;
+    display: none;
+    z-index: 10;
+    line-height: 1.6;
+    max-width: 260px;
+  }
+  #tooltip .t-hostname { font-size: 12px; font-weight: bold; color: #e6edf3; margin-bottom: 6px; }
+  #tooltip .t-row { color: #8b949e; }
+  #tooltip .t-row span { color: #e6edf3; }
+
+  /* ── status bar ────────────────────────────────────────────────── */
+  #status-bar {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    padding: 4px 14px;
+    border-radius: 20px;
+    border: 1px solid #21262d;
+    background: #161b22;
+    white-space: nowrap;
+  }
+  #status-bar.live         { color: #3fb950; border-color: #238636; }
+  #status-bar.reconnecting { color: #d29922; }
+  #status-bar.disconnected { color: #f85149; }
+
+  /* ── legend ────────────────────────────────────────────────────── */
+  #legend {
+    position: fixed;
+    bottom: 14px;
+    right: 16px;
+    font-size: 9px;
+    color: #6e7681;
+    line-height: 1.8;
+  }
+  .leg-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<svg id="graph"></svg>
+
+<div id="panel">
+  <div id="panel-title">tinymesh0</div>
+  <div id="self-stats"><div class="row"><span>connecting…</span></div></div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="status-bar" class="disconnected">disconnected</div>
+
+<div id="legend">
+  <div><span class="leg-dot" style="background:#f0883e"></span>this node</div>
+  <div><span class="leg-dot" style="background:#3fb950"></span>peer — active</div>
+  <div><span class="leg-dot" style="background:#30363d"></span>peer — idle</div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+'use strict';
+
+// ── helpers ───────────────────────────────────────────────────────────────
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const u = ['B','KB','MB','GB'];
+  const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), u.length - 1);
+  return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
+}
+function fmtAgo(ts) {
+  if (!ts) return 'never';
+  const s = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (s < 60)   return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  return Math.floor(s / 3600) + 'h ago';
+}
+
+// ── D3 setup ──────────────────────────────────────────────────────────────
+const svg       = d3.select('#graph');
+const gLinks    = svg.append('g');
+const gLLbls    = svg.append('g');
+const gNodes    = svg.append('g');
+
+let simulation  = null;
+let topo        = { self: null, peers: [] };
+const tooltip   = document.getElementById('tooltip');
+
+function w() { return window.innerWidth;  }
+function h() { return window.innerHeight; }
+
+// ── render ────────────────────────────────────────────────────────────────
+function render(newTopo) {
+  topo = newTopo;
+
+  // ── side panel
+  const self = topo.self;
+  if (self) {
+    document.getElementById('self-stats').innerHTML = `
+      <div class="row"><span>hostname</span><span>${self.hostname}</span></div>
+      <div class="row"><span>mesh ip</span><span>${self.mesh_ip}</span></div>
+      <div class="row"><span>endpoint</span><span>${self.endpoint || '—'}</span></div>
+      <div class="row"><span>peers</span><span>${topo.peers.length}</span></div>
+    `;
+  }
+
+  const selfId = self ? self.hostname : '__self__';
+
+  // Build node / link arrays
+  const nodes = [];
+  const links = [];
+
+  if (self) {
+    nodes.push({ id: selfId, label: self.hostname, ip: self.mesh_ip, self: true });
+  }
+  for (const p of topo.peers) {
+    nodes.push({
+      id: p.hostname, label: p.hostname, ip: p.mesh_ip,
+      self: false, connected: p.connected,
+      latencyMs: p.latency_ms, rxBytes: p.rx_bytes, txBytes: p.tx_bytes,
+      lastHandshake: p.last_handshake, endpoint: p.endpoint,
+    });
+    links.push({
+      source: selfId, target: p.hostname,
+      connected: p.connected, latencyMs: p.latency_ms,
+    });
+  }
+
+  // ── links
+  const linkSel = gLinks.selectAll('line.link')
+    .data(links, d => d.source + '→' + d.target);
+
+  linkSel.enter().append('line').attr('class', 'link')
+    .merge(linkSel)
+    .attr('class', d => 'link' + (d.connected ? ' connected' : ''));
+
+  linkSel.exit().remove();
+
+  // ── link labels
+  const llSel = gLLbls.selectAll('text.link-label')
+    .data(links.filter(l => l.latencyMs > 0), d => d.source + '→' + d.target);
+
+  llSel.enter().append('text').attr('class', 'link-label')
+    .merge(llSel)
+    .text(d => d.latencyMs.toFixed(1) + ' ms');
+
+  llSel.exit().remove();
+
+  // ── nodes
+  const nodeSel = gNodes.selectAll('g.node')
+    .data(nodes, d => d.id);
+
+  const nodeEnter = nodeSel.enter().append('g').attr('class', 'node')
+    .call(d3.drag()
+      .on('start', (ev, d) => { if (!ev.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on('end',   (ev, d) => { if (!ev.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  nodeEnter.append('circle').attr('r', d => d.self ? 22 : 17);
+  nodeEnter.append('text').attr('class', 'node-label').attr('dy', '-0.15em');
+  nodeEnter.append('text').attr('class', 'node-ip').attr('dy', '1.2em');
+
+  // Tooltip on hover
+  nodeEnter.on('mouseenter', (ev, d) => {
+    if (d.self) return;
+    tooltip.style.display = 'block';
+    tooltip.innerHTML = `
+      <div class="t-hostname">${d.label}.mesh</div>
+      <div class="t-row">mesh ip   <span>${d.ip}</span></div>
+      <div class="t-row">endpoint  <span>${d.endpoint || '—'}</span></div>
+      <div class="t-row">latency   <span>${d.latencyMs ? d.latencyMs.toFixed(1)+' ms' : 'n/a'}</span></div>
+      <div class="t-row">↑ sent    <span>${fmtBytes(d.txBytes)}</span></div>
+      <div class="t-row">↓ recv    <span>${fmtBytes(d.rxBytes)}</span></div>
+      <div class="t-row">handshake <span>${fmtAgo(d.lastHandshake)}</span></div>
+    `;
+  }).on('mousemove', ev => {
+    tooltip.style.left = (ev.clientX + 14) + 'px';
+    tooltip.style.top  = (ev.clientY - 10) + 'px';
+  }).on('mouseleave', () => {
+    tooltip.style.display = 'none';
+  });
+
+  // Merge + update all nodes
+  const nodeAll = nodeSel.merge(nodeEnter);
+
+  nodeAll.select('circle')
+    .attr('class', d => 'node-circle ' + (d.self ? 'self' : d.connected ? 'connected' : 'peer'));
+
+  nodeAll.select('text.node-label').text(d => d.label);
+  nodeAll.select('text.node-ip').text(d => d.ip);
+
+  nodeSel.exit().remove();
+
+  // ── simulation
+  if (!simulation) {
+    simulation = d3.forceSimulation()
+      .force('link',      d3.forceLink().id(d => d.id).distance(150))
+      .force('charge',    d3.forceManyBody().strength(-400))
+      .force('center',    d3.forceCenter(w() / 2, h() / 2))
+      .force('collision', d3.forceCollide(50))
+      .on('tick', tick);
+  }
+
+  simulation.nodes(nodes);
+  simulation.force('link').links(links);
+  simulation.alpha(0.4).restart();
+}
+
+function tick() {
+  gLinks.selectAll('line.link')
+    .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+
+  gLLbls.selectAll('text.link-label')
+    .attr('x', d => (d.source.x + d.target.x) / 2)
+    .attr('y', d => (d.source.y + d.target.y) / 2 - 8);
+
+  gNodes.selectAll('g.node')
+    .attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+// ── SSE connection ────────────────────────────────────────────────────────
+const bar = document.getElementById('status-bar');
+
+function connect() {
+  const es = new EventSource('/api/stream');
+
+  es.addEventListener('topology', ev => {
+    try {
+      render(JSON.parse(ev.data));
+      bar.textContent = 'live · ' + new Date().toLocaleTimeString();
+      bar.className   = 'live';
+    } catch (e) { console.error('parse error', e); }
+  });
+
+  es.onerror = () => {
+    bar.textContent = 'reconnecting…';
+    bar.className   = 'reconnecting';
+    es.close();
+    setTimeout(connect, 3000);
+  };
+}
+
+window.addEventListener('resize', () => {
+  if (simulation) {
+    simulation.force('center', d3.forceCenter(w() / 2, h() / 2));
+    simulation.alpha(0.1).restart();
+  }
+});
+
+connect();
+</script>
+</body>
+</html>

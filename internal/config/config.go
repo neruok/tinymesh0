@@ -28,14 +28,30 @@ type PolicyConfig struct {
 	Rules   []PolicyRule `yaml:"rules"`
 }
 
+// DNSConfig controls the mesh DNS server's forwarding behaviour.
+type DNSConfig struct {
+	// UpstreamServers is an explicit list of host:port resolvers to forward
+	// non-.mesh queries to. If empty, servers are read from /etc/resolv.conf
+	// at daemon startup; if that also fails, 8.8.8.8:53 is used as a fallback.
+	UpstreamServers []string `yaml:"upstream-servers"`
+}
+
+// TopologyConfig controls the Phase 5 topology HTTP server.
+type TopologyConfig struct {
+	// ListenAddr is host:port for the HTTP server. Set to "" to disable.
+	ListenAddr string `yaml:"listen-addr"`
+}
+
 type Config struct {
-	Hostname          string       `yaml:"hostname"`
-	ListenPort        int          `yaml:"listen-port"`
-	KeyFile           string       `yaml:"key-file"`
-	STUNServers       []string     `yaml:"stun-servers"`
-	AdvertiseEndpoint string       `yaml:"advertise-endpoint"` // overrides STUN when set
-	Gossip            GossipConfig `yaml:"gossip"`
-	Policy            PolicyConfig `yaml:"policy"`
+	Hostname          string         `yaml:"hostname"`
+	ListenPort        int            `yaml:"listen-port"`
+	KeyFile           string         `yaml:"key-file"`
+	STUNServers       []string       `yaml:"stun-servers"`
+	AdvertiseEndpoint string         `yaml:"advertise-endpoint"` // overrides STUN when set
+	Gossip            GossipConfig   `yaml:"gossip"`
+	Policy            PolicyConfig   `yaml:"policy"`
+	DNS               DNSConfig      `yaml:"dns"`
+	Topology          TopologyConfig `yaml:"topology"`
 }
 
 func Load(path string) (*Config, error) {
@@ -60,6 +76,9 @@ func Default() *Config {
 		Gossip: GossipConfig{
 			BindPort:  7946,
 			RetryJoin: 10,
+		},
+		Topology: TopologyConfig{
+			ListenAddr: "0.0.0.0:8080",
 		},
 	}
 }
