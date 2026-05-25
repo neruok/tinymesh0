@@ -60,6 +60,39 @@ A live graph rendered in the browser showing nodes, active tunnels, per-link lat
 
 ---
 
+## User Experience & Onboarding
+
+Getting someone from zero to a running mesh in under five minutes is the single biggest lever for adoption. Right now they need Go installed, a manual config file, and root access with no guidance if something goes wrong.
+
+- [ ] **Pre-built binaries** — add a GitHub Actions release workflow using goreleaser to publish `tinymesh0d` binaries for `linux/amd64`, `linux/arm64`, and `darwin/amd64` on every tagged release. Users should be able to `curl` a single binary and run it without installing Go.
+- [ ] **Install script** — a `curl | sh` bootstrap that detects OS/arch, downloads the right binary, and places it in `/usr/local/bin`. One command to get started.
+- [ ] **`tinymesh0d version`** — print version string, build commit hash, Go version, and target OS/arch. Makes it easy for users to report bugs and for operators to confirm what's deployed.
+- [ ] **`tinymesh0d doctor`** — pre-flight check command: verifies WireGuard kernel module is loaded, the listen port is available, at least one STUN server is reachable, CAP_NET_ADMIN is present, and iptables is accessible. Prints a clear pass/fail per check with a suggested fix for each failure. Eliminates the most common first-run failures silently.
+- [ ] **`tinymesh0d config check`** — parse and validate a config file without starting the daemon. Exit 0 if valid, print specific errors if not. Useful for CI, for operators editing live configs, and for first-time users who misspell a key.
+- [ ] **Structured startup output** — print step-by-step progress during `up` (STUN discovery, interface creation, gossip join, policy install) so users can see where the daemon is and what it's doing. Right now a slow STUN lookup or a gossip timeout produces no feedback.
+- [ ] **Systemd unit file** — ship a `tinymesh0d.service` template in `scripts/` so users can `cp` it into `/etc/systemd/system/` and run the daemon as a persistent service. Include `After=network-online.target` and `Restart=on-failure`.
+
+---
+
+## Security & Trust
+
+A new user joining a network needs assurance about who else can join. Right now any node that knows a bootstrap peer's address can join the mesh unconditionally.
+
+- [ ] **Peer allowlist** — add an optional `allowed-keys` list in config: a set of WireGuard public keys that are permitted to join. If set, gossip events from unknown keys are ignored and their WireGuard peers are never configured. This gives operators explicit admission control without a central authority.
+- [ ] **Network namespace / pre-shared token** — add an optional `network-id` field (a short string or token) that is included in gossip `NodeState`. Nodes with different `network-id` values ignore each other's gossip. Prevents accidental mesh merging when two independent deployments share a bootstrap server.
+- [ ] **TLS on the topology server** — add an option to serve the topology UI and `/metrics` over HTTPS using a self-signed cert with the node's mesh IP as SAN. Print the cert fingerprint on startup so operators can pin it. Prevents sniffing of peer metadata (latency, bytes, endpoints) on untrusted networks.
+
+---
+
+## Topology UI — Continued
+
+- [ ] **Latency sparkline in detail panel** — store the last N latency samples per peer in memory and render a small inline SVG sparkline in the click-to-open detail panel. Lets users see whether latency is stable, trending up, or spiking — much more useful than a single number.
+- [ ] **Join/leave event highlights** — when a peer joins, briefly animate its node with a green pulse ring; when it leaves, briefly dim and shake it before it disappears. Makes state changes legible at a glance on a large mesh instead of requiring the user to read the peer count.
+- [ ] **Node search / filter** — add a search input in the header that highlights matching nodes and dims the rest. Essential for meshes with more than ~10 nodes where the graph becomes dense.
+- [ ] **Bandwidth history graph** — a small time-series chart of aggregate TX/RX bytes per second in the header bar, updated from the SSE stream. Lets users see traffic spikes without switching to Prometheus.
+
+---
+
 ## Improvements & Nice-to-Haves
 
 - [ ] **Endpoint refresh** — re-run STUN on an interval and push updated `NodeState` via gossip if the public endpoint changes (handles dynamic IPs, NAT rebinding)
@@ -67,6 +100,7 @@ A live graph rendered in the browser showing nodes, active tunnels, per-link lat
 - [ ] **Persistent membership** — write gossip membership to disk so nodes can reconnect to known peers without a bootstrap peer after a restart
 - [ ] **macOS support** — use `golang.zx2c4.com/wireguard` (userspace WireGuard) for macOS where kernel WireGuard may not be available
 - [ ] **Key rotation** — support rotating the WireGuard keypair and propagating the new public key via gossip
+- [ ] **tinymesh0d -> tm0d** — `tinymesh0d` is a mouthful to type out. shorten the daemon acronym to `tm0d`
 - [x] **Metrics endpoint** — expose Prometheus metrics (peer count, handshake age, bytes transferred) at `/metrics`
 
 ---
