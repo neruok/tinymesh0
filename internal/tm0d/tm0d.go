@@ -118,7 +118,7 @@ func (d *Daemon) Run() error {
 	}
 	defer os.Remove(PidFile) //nolint:errcheck // best-effort cleanup in defer
 
-	d.waitForShutdown(cfg, policyEngine)
+	d.waitForShutdown(policyEngine)
 
 	fmt.Println("\nshutting down...")
 	_ = gossipMgr.Shutdown()
@@ -190,7 +190,7 @@ func (d *Daemon) startPolicyReloader(engine *policy.Engine) func() {
 
 // waitForShutdown blocks until SIGINT or SIGTERM, handling SIGHUP as an
 // immediate policy reload in between.
-func (d *Daemon) waitForShutdown(cfg *config.Config, engine *policy.Engine) {
+func (d *Daemon) waitForShutdown(engine *policy.Engine) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	for {
