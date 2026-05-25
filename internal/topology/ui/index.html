@@ -80,6 +80,24 @@ body {
 }
 #metrics-link:hover { color: var(--text); border-color: var(--muted); }
 
+/* ── view toggle ─────────────────────────────────────────────────── */
+#view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.view-btn {
+  background: none; border: none;
+  color: var(--muted); font-family: inherit; font-size: 10px;
+  padding: 4px 12px; cursor: pointer; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.view-btn:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.view-btn.active { background: var(--border); color: var(--text); }
+.view-btn + .view-btn { border-left: 1px solid var(--border); }
+
 /* ── main area ───────────────────────────────────────────────────── */
 #main {
   flex: 1;
@@ -186,6 +204,11 @@ svg#graph { display: block; width: 100%; height: 100%; }
   <div id="hdr-tx"    class="hdr-stat"><div class="hdr-label">↑ tx rate</div><div class="hdr-val">—</div></div>
   <div id="hdr-rx"    class="hdr-stat"><div class="hdr-label">↓ rx rate</div><div class="hdr-val">—</div></div>
   <div id="hdr-spacer"></div>
+  <div id="view-toggle">
+    <button class="view-btn active" data-mode="local" onclick="setViewMode('local')">Local</button>
+    <button class="view-btn"        data-mode="mesh"  onclick="setViewMode('mesh')">Mesh</button>
+  </div>
+  <div class="hdr-sep"></div>
   <a href="/metrics" target="_blank" id="metrics-link">prometheus ↗</a>
   <div class="hdr-sep"></div>
   <div id="hdr-time"  class="hdr-stat"><div class="hdr-label">updated</div><div class="hdr-val">—</div></div>
@@ -251,6 +274,7 @@ let simulation      = null;
 const persistentNodes = new Map(); // id → node object
 const persistentLinks = new Map(); // 'srcId→dstId' → link object
 let prevPeerIds       = new Set();
+let viewMode          = 'local';   // 'local' (star) | 'mesh' (all-pairs)
 
 // ── helpers ───────────────────────────────────────────────────────────────
 function fmtBytes(b) {
@@ -278,6 +302,17 @@ function latencyColor(ms) {
   if (ms < 10)  return '#3fb950';
   if (ms < 50)  return '#d29922';
   return '#f85149';
+}
+
+// Stable D3 key for link data joins. D3's forceLink mutates source/target from
+// string IDs to node-object references in-place; this extracts the ID either way
+// so the key is consistent before and after mutation.  Without this, every link
+// in a multi-node mesh produces the key "[object Object]→[object Object]", which
+// causes D3 to mis-match elements and break the link rendering.
+function linkKey(d) {
+  const src = typeof d.source === 'object' ? d.source.id : d.source;
+  const tgt = typeof d.target === 'object' ? d.target.id : d.target;
+  return src + '→' + tgt;
 }
 
 // Derive per-peer bandwidth rates from two consecutive topology snapshots.
@@ -339,6 +374,7 @@ function render(newTopo) {
     Object.assign(n, { label: self.hostname, ip: self.mesh_ip, isSelf: true });
     persistentNodes.set(selfId, n);
   }
+  // Update peer node objects in-place.
   for (const p of topo.peers) {
     const r = rates[p.hostname] || {};
     const n = persistentNodes.get(p.hostname) || { id: p.hostname };
@@ -356,41 +392,67 @@ function render(newTopo) {
       rxRate:        r.rxRate || 0,
     });
     persistentNodes.set(p.hostname, n);
+  }
 
-    // Reuse the same link object so the D3 key is stable after the force
-    // simulation mutates source/target from strings to node references.
-    const mapKey = `${selfId}→${p.hostname}`;
-    const lnk = persistentLinks.get(mapKey) || { source: selfId, target: p.hostname };
-    lnk.connected  = p.connected;
-    lnk.latencyMs  = p.latency_ms;
-    persistentLinks.set(mapKey, lnk);
+  // Build links based on the active view mode.
+  // Link objects are kept alive in persistentLinks so D3's linkKey() always
+  // sees consistent source/target values even after forceLink mutates them.
+  const newLinkKeys = new Set();
+  if (viewMode === 'mesh') {
+    // All-pairs: every node connected to every other node.
+    // Only self↔peer edges have measured latency/bandwidth (isMeasured=true).
+    // Peer↔peer edges are shown dashed with assumed connectivity.
+    const allIds = [selfId, ...topo.peers.map(p => p.hostname)];
+    for (let i = 0; i < allIds.length; i++) {
+      for (let j = i + 1; j < allIds.length; j++) {
+        const a = allIds[i], b = allIds[j];
+        const mapKey = `${a}→${b}`;
+        newLinkKeys.add(mapKey);
+        const lnk = persistentLinks.get(mapKey) || { source: a, target: b };
+        const peerId = a === selfId ? b : b === selfId ? a : null;
+        const pd = peerId ? topo.peers.find(p => p.hostname === peerId) : null;
+        lnk.connected  = pd ? pd.connected  : true;
+        lnk.latencyMs  = pd ? pd.latency_ms : 0;
+        lnk.isMeasured = !!pd;
+        persistentLinks.set(mapKey, lnk);
+      }
+    }
+  } else {
+    // Local view: only edges from self to each peer.
+    for (const p of topo.peers) {
+      const mapKey = `${selfId}→${p.hostname}`;
+      newLinkKeys.add(mapKey);
+      const lnk = persistentLinks.get(mapKey) || { source: selfId, target: p.hostname };
+      lnk.connected  = p.connected;
+      lnk.latencyMs  = p.latency_ms;
+      lnk.isMeasured = true;
+      persistentLinks.set(mapKey, lnk);
+    }
   }
-  // Remove objects for peers that have left.
-  for (const id of persistentNodes.keys()) {
-    if (!newPeerIds.has(id)) persistentNodes.delete(id);
-  }
-  for (const key of persistentLinks.keys()) {
-    const dstId = key.split('→')[1];
-    if (!newPeerIds.has(dstId)) persistentLinks.delete(key);
-  }
+
+  // Remove objects for nodes/links that are no longer present.
+  for (const id  of persistentNodes.keys()) { if (!newPeerIds.has(id))    persistentNodes.delete(id);  }
+  for (const key of persistentLinks.keys()) { if (!newLinkKeys.has(key))   persistentLinks.delete(key); }
+
   const nodes = [...persistentNodes.values()];
   const links = [...persistentLinks.values()];
 
   // ── links
-  const linkSel = gLinks.selectAll('line.link').data(links, d => d.source + '→' + d.target);
+  const linkSel = gLinks.selectAll('line.link').data(links, linkKey);
 
   linkSel.enter().append('line').attr('class', 'link')
     .style('fill', 'none')
     .merge(linkSel)
-    .style('stroke',       d => latencyColor(d.latencyMs))
-    .style('stroke-width', d => d.connected ? 2 : 1)
-    .style('opacity',      d => d.connected ? 0.75 : 0.25);
+    .style('stroke',           d => d.isMeasured ? latencyColor(d.latencyMs) : '#6e7681')
+    .style('stroke-width',     d => d.isMeasured && d.connected ? 2 : 1)
+    .style('stroke-dasharray', d => d.isMeasured ? 'none' : '5 5')
+    .style('opacity',          d => d.isMeasured ? (d.connected ? 0.75 : 0.25) : 0.45);
 
   linkSel.exit().remove();
 
-  // ── link labels (latency)
+  // ── link labels (latency — measured links only)
   const llSel = gLLbls.selectAll('text.ll')
-    .data(links.filter(l => l.latencyMs > 0), d => d.source + '→' + d.target);
+    .data(links.filter(l => l.isMeasured && l.latencyMs > 0), linkKey);
 
   llSel.enter().append('text').attr('class', 'll')
     .style('font-size', '9px').style('text-anchor', 'middle').style('pointer-events', 'none')
@@ -474,13 +536,16 @@ function render(newTopo) {
 
   nodeSel.exit().remove();
 
-  // ── force simulation
+  // ── force simulation (parameters tuned per view mode)
   if (!simulation) {
+    const mesh = viewMode === 'mesh';
     simulation = d3.forceSimulation()
-      .force('link',      d3.forceLink().id(d => d.id).distance(170))
-      .force('charge',    d3.forceManyBody().strength(-700))
+      // Mesh view: shorter link distance and lighter charge because the graph is
+      // fully connected (n*(n-1)/2 edges) and would collapse without tuning.
+      .force('link',      d3.forceLink().id(d => d.id).distance(mesh ? 110 : 170))
+      .force('charge',    d3.forceManyBody().strength(mesh ? -300 : -700))
       .force('center',    d3.forceCenter(W() / 2, H() / 2))
-      .force('collision', d3.forceCollide(58))
+      .force('collision', d3.forceCollide(mesh ? 42 : 58))
       .on('tick', tick);
     structural = true;
   }
@@ -636,6 +701,21 @@ function openDetail(d) {
 function closeDetail() {
   selectedNode = null;
   document.getElementById('detail').classList.remove('open');
+}
+
+// Switch between star (local) and full-mesh views. Clears link state and
+// nulls the simulation so it is recreated with mode-appropriate forces.
+function setViewMode(mode) {
+  if (mode === viewMode) return;
+  viewMode = mode;
+  document.querySelectorAll('.view-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  persistentLinks.clear();
+  particles = [];
+  prevPeerIds = new Set(); // guarantees structural=true on next render
+  simulation  = null;      // recreate with mode-appropriate forces
+  closeDetail();
+  if (topo.self) render(topo);
 }
 
 svgEl.addEventListener('click', () => closeDetail());

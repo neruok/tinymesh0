@@ -71,6 +71,7 @@ make build
 | `make test` | Run all unit tests |
 | `make lint` | Run golangci-lint (downloads on first use via `go run`) |
 | `make dev` | Generate keys, build configs, and launch a two-node Docker mesh |
+| `make dev-large` | Generate keys, build configs, and launch a six-node Docker mesh with varied policy configurations |
 | `make release` | Run `build → test → lint` in sequence; fails fast on any error |
 
 ### Generate a keypair
@@ -175,6 +176,110 @@ docker exec node-b ping 100.75.167.232
 ```
 
 You should see sub-millisecond ping times and a confirmed WireGuard handshake.
+
+---
+
+## Large network testing
+
+`make dev-large` launches a six-node mesh with a different policy configuration on each node, covering the main policy patterns: open, blocklist, allowlist, peer-specific rules, and quarantine.
+
+```bash
+make dev-large
+```
+
+`scripts/setup-large-net.sh` generates all keys, configs, and `docker-compose.large.yml`, then Docker Compose builds and starts the containers. The topology UI is served by node-a at `http://localhost:8080`.
+
+### Policy matrix
+
+| Node | Default | Rules | Model |
+|---|---|---|---|
+| `node-a` | open | none | Seed / unrestricted |
+| `node-b` | allow | deny ports 9999, 2112 | Blocklist specific ports |
+| `node-c` | deny | allow ports 80, 443, 8080 | Web-only allowlist |
+| `node-d` | deny | allow node-a/node-b → 5432; allow \* → 8080 | Database server — trusted peers only |
+| `node-e` | allow | deny node-f → 22; deny node-f → 3306 | Peer-specific block for an untrusted node |
+| `node-f` | deny | allow \* → 8080 | Quarantine — HTTP health checks only |
+
+### Verify the policies
+
+**Check that all six nodes have formed a mesh:**
+
+```bash
+docker exec node-a-lg tinymesh0d status
+```
+
+Expected: five peers listed with active WireGuard handshakes.
+
+**Confirm policy chains are installed on each node:**
+
+```bash
+for n in node-a-lg node-b-lg node-c-lg node-d-lg node-e-lg node-f-lg; do
+  echo "=== $n ==="; docker exec $n tinymesh0d policy list
+done
+```
+
+**node-b: blocked port is dropped, allowed port passes**
+
+```bash
+# Terminal 1 — listener on the blocked port inside node-b
+docker exec node-b-lg ncat -l 9999
+
+# Terminal 2 — attempt from node-a (times out — DROPped by node-b's policy)
+docker exec node-a-lg ncat -w 2 node-b.mesh 9999
+
+# Terminal 3 — attempt on an allowed port (succeeds)
+echo "hello" | docker exec -i node-a-lg ncat -w 2 node-b.mesh 8080
+```
+
+**node-c: default deny — only web ports pass**
+
+```bash
+# This should succeed (port 8080 is allowed)
+echo "hello" | docker exec -i node-a-lg ncat -w 2 node-c.mesh 8080
+
+# This should time out (port 9000 is not in node-c's allow list)
+docker exec node-a-lg ncat -w 2 node-c.mesh 9000
+```
+
+**node-d: only node-a and node-b may reach the database port**
+
+```bash
+# From node-a — allowed (node-a is in node-d's allow list for port 5432)
+docker exec node-a-lg ncat -w 2 node-d.mesh 5432 && echo "connected"
+
+# From node-e — dropped (node-e is not permitted)
+docker exec node-e-lg ncat -w 2 node-d.mesh 5432 && echo "connected" || echo "blocked"
+```
+
+**node-e: node-f is blocked on sensitive ports, others are not**
+
+```bash
+# From node-f — dropped on port 22
+docker exec node-f-lg ncat -w 2 node-e.mesh 22 && echo "connected" || echo "blocked"
+
+# From node-a — succeeds on the same port (node-a is not restricted)
+docker exec node-a-lg ncat -w 2 node-e.mesh 22 && echo "connected"
+```
+
+**node-f: quarantine — only port 8080 responds**
+
+```bash
+# Port 8080 is allowed
+echo "hello" | docker exec -i node-a-lg ncat -w 2 node-f.mesh 8080
+
+# Any other port is dropped
+docker exec node-a-lg ncat -w 2 node-f.mesh 5432 && echo "connected" || echo "blocked"
+```
+
+**Live reload — change a policy without restarting**
+
+With the mesh running, edit `configs-large/node-b.yaml` on the host (add or remove a rule), then signal the daemon:
+
+```bash
+docker exec node-b-lg tinymesh0d policy reload
+```
+
+The daemon reinstalls the iptables chain immediately. The WireGuard sessions remain active throughout.
 
 ---
 

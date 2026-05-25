@@ -1,0 +1,77 @@
+services:
+  node-a:
+    build: .
+    container_name: node-a-lg
+    hostname: node-a
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs-large/node-a.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys-large/node-a.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks: [mesh-large]
+
+  node-b:
+    build: .
+    container_name: node-b-lg
+    hostname: node-b
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    volumes:
+      - ./configs-large/node-b.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys-large/node-b.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks: [mesh-large]
+    depends_on: [node-a]
+
+  node-c:
+    build: .
+    container_name: node-c-lg
+    hostname: node-c
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    volumes:
+      - ./configs-large/node-c.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys-large/node-c.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks: [mesh-large]
+    depends_on: [node-a]
+
+  node-d:
+    build: .
+    container_name: node-d-lg
+    hostname: node-d
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    volumes:
+      - ./configs-large/node-d.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys-large/node-d.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks: [mesh-large]
+    depends_on: [node-a]
+
+  node-e:
+    build: .
+    container_name: node-e-lg
+    hostname: node-e
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    volumes:
+      - ./configs-large/node-e.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys-large/node-e.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks: [mesh-large]
+    depends_on: [node-a]
+
+  node-f:
+    build: .
+    container_name: node-f-lg
+    hostname: node-f
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    volumes:
+      - ./configs-large/node-f.yaml:/etc/tinymesh0/config.yaml:ro
+      - ./keys-large/node-f.key:/etc/tinymesh0/private.key:ro
+    command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
+    networks: [mesh-large]
+    depends_on: [node-a]
+
+networks:
+  mesh-large:
+    driver: bridge
