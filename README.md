@@ -18,7 +18,7 @@
 
 ## What is tinymesh0?
 
-tinymesh0 is a cryptographically secure, decentralized mesh VPN with gossip-based node discovery and per-node access policy enforcement. tinymesh0 connects machines across the internet into a private encrypted network — like Tailscale or ZeroTier, but built from scratch. Every node is equal: there is no central server, no account required, and no single point of failure.
+tinymesh0 is a cryptographically secure, decentralized mesh WireGuard VPN with gossip-based node discovery and per-node access policy enforcement. tinymesh0 connects machines across the internet into a private encrypted network — like Tailscale or ZeroTier, but built from scratch. Every node is equal: there is no central server, no account required, and no single point of failure.
 
 Each node:
 - Gets a **stable private IP** derived deterministically from its cryptographic identity
