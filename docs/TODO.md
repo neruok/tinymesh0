@@ -14,17 +14,20 @@
 
 Enforce per-node allow/deny rules at the WireGuard interface using iptables. Because WireGuard cryptographically binds source IP to public key, mesh IPs are unforgeable and safe to use as identity in rules.
 
-- [ ] Define a policy rule DSL in config:
+- [x] Define a policy rule DSL in config:
   ```yaml
   policy:
-    - allow: "node-a -> node-b port 5432"
-    - deny:  "* -> node-internal port 22"
+    default: allow
+    rules:
+      - allow: "node-a -> node-b port 5432"
+      - deny:  "* -> node-internal port 22"
   ```
-- [ ] Distribute policies via gossip (add `Policies []PolicyRule` to `NodeState`)
-- [ ] Implement policy engine (`internal/policy/`) that translates rules into iptables chains on `tinymesh0`
-- [ ] Apply rules on peer join, remove on peer leave
-- [ ] Add `tinymesh0d policy list` and `tinymesh0d policy reload` CLI commands
-- [ ] Test: verify denied traffic is actually dropped (not just missing route)
+- [x] Distribute policies via gossip (add `Policies []PolicyRule` to `NodeState`)
+- [x] Implement policy engine (`internal/policy/`) that translates rules into iptables chains on `tinymesh0`
+- [x] Apply rules on peer join, remove on peer leave
+- [x] Add `tinymesh0d policy list` and `tinymesh0d policy reload` CLI commands
+- [x] Policy auto-reloads from config every 5 seconds; manual reload via SIGHUP also supported
+- [x] Test: verify denied traffic is actually dropped (not just missing route)
 
 ---
 

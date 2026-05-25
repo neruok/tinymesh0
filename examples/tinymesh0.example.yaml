@@ -24,3 +24,19 @@ gossip:
   # All other nodes need at least one known peer address to bootstrap from.
   bootstrap-peers:
     # - "seed-node.example.com:7946"
+
+# policy controls which mesh traffic this node accepts on the tinymesh0 interface.
+# Rules are evaluated in order; the first match wins. src and dst may be a
+# hostname (resolved via gossip), a mesh IP, or "*" (any). Specifying a port
+# matches both TCP and UDP.
+#
+# If no rules are configured the policy block is omitted and all traffic is
+# allowed (equivalent to default: allow with no rules).
+#
+# policy:
+#   default: allow   # action when no rule matches: "allow" (default) or "deny"
+#   rules:
+#     - allow: "node-a -> * port 80"        # node-a may reach any peer on port 80
+#     - allow: "node-b -> mynode port 5432" # node-b may reach postgres on this node
+#     - deny:  "* -> * port 22"             # block SSH from all mesh peers
+#     - allow: "* -> *"                     # allow everything else

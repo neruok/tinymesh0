@@ -14,8 +14,8 @@ import (
 // PeerSyncer is the interface the gossip manager uses to keep WireGuard in sync.
 // Implemented in main by a thin adapter over wireguard.Manager.
 type PeerSyncer interface {
-	SyncPeer(pubKey wgtypes.Key, meshIP net.IP, endpoint *net.UDPAddr) error
-	RemovePeer(pubKey wgtypes.Key) error
+	SyncPeer(pubKey wgtypes.Key, meshIP net.IP, endpoint *net.UDPAddr, hostname string) error
+	RemovePeer(pubKey wgtypes.Key, hostname string) error
 }
 
 // Config holds gossip subsystem parameters.
@@ -128,7 +128,7 @@ func (m *Manager) NotifyLeave(node *memberlist.Node) {
 	if err != nil {
 		return
 	}
-	if err := m.syncer.RemovePeer(pubKey); err != nil {
+	if err := m.syncer.RemovePeer(pubKey, ns.Hostname); err != nil {
 		log.Printf("gossip: removing peer %s: %v", ns.Hostname, err)
 		return
 	}
@@ -157,5 +157,5 @@ func (m *Manager) syncPeer(ns NodeState) error {
 		}
 	}
 
-	return m.syncer.SyncPeer(pubKey, meshIP, endpoint)
+	return m.syncer.SyncPeer(pubKey, meshIP, endpoint, ns.Hostname)
 }

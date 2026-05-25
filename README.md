@@ -149,6 +149,8 @@ gossip: peer joined — node-b  mesh=100.117.163.169  endpoint=198.51.100.9:5182
 | `tinymesh0d down` | Take down the mesh interface |
 | `tinymesh0d status` | Show interface and peer status |
 | `tinymesh0d keygen` | Generate a new WireGuard keypair |
+| `tinymesh0d policy list` | Print the active iptables policy chain |
+| `tinymesh0d policy reload` | Signal the running daemon to reload policy from config (SIGHUP) |
 
 ---
 
@@ -174,13 +176,109 @@ You should see sub-millisecond ping times and a confirmed WireGuard handshake.
 
 ---
 
+## Testing
+
+There are no automated tests yet. Verification is done by running the two-node Docker environment and inspecting behaviour directly.
+
+### Tunnel verification
+
+```bash
+make dev
+
+# Confirm peer is visible on node-b
+docker exec node-b tinymesh0d status
+
+# Ping node-a's mesh IP from node-b (get the IP from the status output)
+docker exec node-b ping <node-a-mesh-ip>
+```
+
+### Policy engine verification
+
+The policy engine requires `iptables` inside the containers (included in the Docker image). Before running `make dev`, add a `policy` block to `configs/node-b.yaml` — or edit it after running `bash scripts/setup-dev.sh` and before running `docker compose up --build`.
+
+**Example: deny one port, allow everything else**
+
+```yaml
+# configs/node-b.yaml
+policy:
+  default: allow
+  rules:
+    - deny: "* -> * port 9999"
+```
+
+**1. Confirm the chain was created**
+
+```bash
+docker exec node-b tinymesh0d policy list
+```
+
+Expected output shows the DROP rules for port 9999 (one for TCP, one for UDP) followed by the chain reference count in INPUT.
+
+**2. Confirm denied traffic is actually dropped**
+
+```bash
+# Terminal 1 — start a listener on the denied port inside node-b
+docker exec node-b ncat -l 9999
+
+# Terminal 2 — try to connect from node-a (times out; packet is DROPped)
+docker exec node-a ncat -w 2 <node-b-mesh-ip> 9999
+```
+
+The connection attempt on node-a should hang for 2 seconds and exit with no output. The listener on node-b receives nothing.
+
+**3. Confirm allowed traffic still flows**
+
+```bash
+# Terminal 1 — listen on an allowed port
+docker exec node-b ncat -l 8080
+
+# Terminal 2 — connect and send data
+echo "hello" | docker exec -i node-a ncat -w 2 <node-b-mesh-ip> 8080
+```
+
+"hello" should appear in node-b's terminal.
+
+**4. Test a hostname-based rule with default deny**
+
+```yaml
+# configs/node-b.yaml
+policy:
+  default: deny
+  rules:
+    - allow: "node-a -> * port 8080"
+```
+
+With this config, only node-a reaching port 8080 is permitted. All other inbound mesh traffic is dropped. Verify with the same ncat steps above — port 8080 from node-a works, any other port or source does not.
+
+**5. Test live policy reload without restarting**
+
+With the mesh running, edit `configs/node-b.yaml` on the host (add or remove a rule), then signal the daemon:
+
+```bash
+docker exec node-b tinymesh0d policy reload
+```
+
+The daemon logs `policy reloaded` and immediately reinstalls the iptables chain. The WireGuard session remains active throughout. Re-run `tinymesh0d policy list` to confirm the rules changed.
+
+**What to watch in the logs**
+
+```
+node-b  | policy engine active (1 rules, default=allow)
+node-b  | policy: deferring rule (unresolved hostname): node-a→*
+node-b  | gossip: peer joined — node-a  mesh=100.x.x.x  endpoint=...
+```
+
+The "deferring rule" line is expected — hostname-based rules are skipped until gossip delivers the peer's NodeState and resolves the name to a mesh IP. The rule is installed automatically on peer join.
+
+---
+
 ## Roadmap
 
 | Phase | Status | Description |
 |---|---|---|
 | 1 — Core tunnel | ✅ Done | WireGuard interface management, STUN discovery |
 | 2 — Gossip | ✅ Done | SWIM-based peer discovery, dynamic WireGuard config, no static peers |
-| 3 — Policy engine | 📋 Planned | Per-node allow/deny rules enforced via iptables |
+| 3 — Policy engine | ✅ Done | Per-node allow/deny rules enforced via iptables, live reload via SIGHUP |
 | 4 — Mesh DNS | 📋 Planned | Resolve `<hostname>.mesh` to peer mesh IPs |
 | 5 — Topology UI | 📋 Planned | Live network graph via WebSocket + D3.js |
 
@@ -193,7 +291,9 @@ tinymeshd
 ├── cmd/tinymesh0d/       CLI entry point (cobra)
 ├── internal/
 │   ├── config/           YAML config loader
+│   ├── gossip/           SWIM-based peer discovery (memberlist)
 │   ├── ipam/             Deterministic mesh IP assignment
+│   ├── policy/           iptables policy engine (allow/deny rules)
 │   ├── stun/             STUN client (RFC 5389, from scratch)
 │   └── wireguard/        Interface lifecycle via wgctrl + netlink
 └── scripts/              Development utilities
