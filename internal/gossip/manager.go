@@ -21,6 +21,8 @@ type PeerSyncer interface {
 // Config holds gossip subsystem parameters.
 type Config struct {
 	NodeName       string
+	SecretKey      []byte
+	BindAddr       string // Empty keeps memberlist's default bind address.
 	BindPort       int
 	BootstrapPeers []string
 	RetryJoin      int
@@ -35,10 +37,19 @@ type Manager struct {
 }
 
 func NewManager(cfg Config, self NodeState, syncer PeerSyncer) (*Manager, error) {
+	if len(cfg.SecretKey) != 32 {
+		return nil, fmt.Errorf("a 32-byte shared gossip key is required")
+	}
 	m := &Manager{self: self, nodeName: cfg.NodeName, syncer: syncer}
 
 	mlCfg := memberlist.DefaultLANConfig()
 	mlCfg.Name = cfg.NodeName
+	mlCfg.SecretKey = cfg.SecretKey
+	mlCfg.GossipVerifyIncoming = true
+	mlCfg.GossipVerifyOutgoing = true
+	if cfg.BindAddr != "" {
+		mlCfg.BindAddr = cfg.BindAddr
+	}
 	mlCfg.BindPort = cfg.BindPort
 	mlCfg.AdvertisePort = cfg.BindPort
 	mlCfg.Delegate = m
@@ -53,6 +64,7 @@ func NewManager(cfg Config, self NodeState, syncer PeerSyncer) (*Manager, error)
 
 	if len(cfg.BootstrapPeers) > 0 {
 		if err := m.joinWithRetry(cfg.BootstrapPeers, cfg.RetryJoin); err != nil {
+			_ = list.Shutdown()
 			return nil, err
 		}
 	}

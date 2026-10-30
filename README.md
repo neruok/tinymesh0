@@ -9,6 +9,11 @@
 
 > **Peer pressure, but encrypted.**
 
+> This fork requires shared-key authenticated, encrypted gossip enrollment.
+> All members must configure `gossip.key-file`; plaintext upstream nodes cannot join.
+> See [ENROLLMENT.md](docs/ENROLLMENT.md) for setup and trust limits.
+> This enrollment patch has local tests; it is not a production deployment or a full security audit.
+
 [![Go Version](https://img.shields.io/badge/go-1.24-blue)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -62,7 +67,7 @@ For a detailed technical walkthrough, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 ### Build
 
 ```bash
-git clone https://github.com/jakenoc/tinymesh0
+git clone https://github.com/neruok/tinymesh0
 cd tinymesh0
 make build
 ```
@@ -75,6 +80,27 @@ make build
 | `make dev` | Generate keys, build configs, and launch a two-node Docker mesh |
 | `make dev-large` | Generate keys, build configs, and launch a six-node Docker mesh with varied policy configurations |
 | `make release` | Run `build → test → lint` in sequence; fails fast on any error |
+
+### Provision the shared mesh key
+
+Every member must have the same enrollment key before starting. Generate it once
+in a private directory, then distribute it through an existing trusted channel:
+
+```bash
+umask 077
+head -c 32 /dev/urandom | base64 > gossip.key
+chmod 600 gossip.key
+```
+
+Set `gossip.key-file` to that node's copy. Keep it separate from each node's
+WireGuard private key; do not put the key contents in YAML, arguments, logs or Git.
+The key file must be a regular file readable only by its owner. Missing, malformed
+or group/world-accessible keys stop startup before WireGuard, DNS or network
+discovery. See [the enrollment trust model](docs/ENROLLMENT.md).
+
+The two-node and six-node development setup scripts generate a shared key for
+their respective disposable meshes and mount it read-only into every container.
+Rerunning a setup script replaces that development mesh's credentials.
 
 ### Generate a keypair
 
@@ -104,13 +130,14 @@ stun-servers:
   - stun.cloudflare.com:3478
 
 gossip:
+  key-file: ./gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:
     - "seed-node.example.com:7946"  # omit if this node is the seed
 ```
 
-Peers are discovered automatically via gossip — no manual key exchange or endpoint configuration required.
+After the shared mesh key is provisioned, peers are discovered automatically via authenticated, encrypted gossip — no manual WireGuard public-key exchange is required.
 
 ### advertise-endpoint
 
@@ -287,7 +314,7 @@ The daemon reinstalls the iptables chain immediately. The WireGuard sessions rem
 
 ## Testing
 
-There are no automated tests yet. Verification is done by running the two-node Docker environment and inspecting behaviour directly.
+Automated configuration and loopback enrollment tests cover accepted shared keys, missing/invalid/insecure key files, wrong-key and plaintext join rejection, and the peer-sync boundary. Run `go test ./...`. These tests do not create WireGuard interfaces or change DNS/firewalls. Actual WireGuard, DNS and policy behavior still requires isolated runtime testing.
 
 ### Tunnel verification
 

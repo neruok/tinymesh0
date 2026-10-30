@@ -11,6 +11,7 @@ services:
     volumes:
       - ./configs/node-a.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys/node-a.key:/etc/tinymesh0/private.key:ro
+      - ./keys/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks:
       - mesh-test
@@ -25,6 +26,7 @@ services:
     volumes:
       - ./configs/node-b.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys/node-b.key:/etc/tinymesh0/private.key:ro
+      - ./keys/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks:
       - mesh-test

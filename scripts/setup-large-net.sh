@@ -7,6 +7,7 @@
 #   configs-large/           one tinymesh0 YAML config per node
 #   docker-compose.large.yml ready to run with "docker compose -f ... up --build"
 set -euo pipefail
+umask 077
 
 cd "$(dirname "$0")/.."
 
@@ -28,6 +29,9 @@ for node in "${NODES[@]}"; do
     echo "    ${node}: key written"
 done
 
+head -c 32 /dev/urandom | base64 > keys-large/gossip.key
+chmod 600 keys-large/gossip.key
+
 # ── 3. node configs ───────────────────────────────────────────────────────
 echo "==> writing configs..."
 
@@ -41,6 +45,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers: []
@@ -56,6 +61,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:
@@ -77,6 +83,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:
@@ -100,6 +107,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:
@@ -122,6 +130,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:
@@ -143,6 +152,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:
@@ -175,6 +185,7 @@ services:
     volumes:
       - ./configs-large/node-a.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys-large/node-a.key:/etc/tinymesh0/private.key:ro
+      - ./keys-large/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks: [mesh-large]
 
@@ -186,6 +197,7 @@ services:
     volumes:
       - ./configs-large/node-b.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys-large/node-b.key:/etc/tinymesh0/private.key:ro
+      - ./keys-large/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks: [mesh-large]
     depends_on: [node-a]
@@ -198,6 +210,7 @@ services:
     volumes:
       - ./configs-large/node-c.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys-large/node-c.key:/etc/tinymesh0/private.key:ro
+      - ./keys-large/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks: [mesh-large]
     depends_on: [node-a]
@@ -210,6 +223,7 @@ services:
     volumes:
       - ./configs-large/node-d.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys-large/node-d.key:/etc/tinymesh0/private.key:ro
+      - ./keys-large/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks: [mesh-large]
     depends_on: [node-a]
@@ -222,6 +236,7 @@ services:
     volumes:
       - ./configs-large/node-e.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys-large/node-e.key:/etc/tinymesh0/private.key:ro
+      - ./keys-large/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks: [mesh-large]
     depends_on: [node-a]
@@ -234,6 +249,7 @@ services:
     volumes:
       - ./configs-large/node-f.yaml:/etc/tinymesh0/config.yaml:ro
       - ./keys-large/node-f.key:/etc/tinymesh0/private.key:ro
+      - ./keys-large/gossip.key:/etc/tinymesh0/gossip.key:ro
     command: ["up", "-c", "/etc/tinymesh0/config.yaml"]
     networks: [mesh-large]
     depends_on: [node-a]

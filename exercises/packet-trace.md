@@ -633,6 +633,7 @@ The `wg` command-line tool (if available in the Docker container) shows live ses
 |---------|--------|----------------|
 | Policy/firewall (iptables) | Phase 3 — in progress | Without it, any node can reach any other node on any port |
 | IPv6 STUN / mesh IPs | Not yet (`stun.go:178`) | Only IPv4 mesh supported |
-| Certificate pinning for gossip | Not present | Gossip traffic is unauthenticated — anyone who can reach port 7946 can join the cluster |
+| Group-key authenticated gossip | Required | Peers must possess the shared key; UDP gossip and TCP state exchanges use authenticated encryption |
+| Individual certificate pinning | Not present | All holders of the group key are trusted; no individual hostname-ownership or revocation guarantee |
 | Session key rotation on schedule | WireGuard built-in | Handled automatically every 180s |
 | Multi-path / failover | Not present | Single endpoint per peer; STUN rediscovery happens only on restart |

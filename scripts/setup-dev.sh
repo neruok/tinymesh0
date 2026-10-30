@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 cd "$(dirname "$0")/.."
 
@@ -17,6 +18,7 @@ mkdir -p keys configs
 
 printf '%s\n' "$PRIV_A" > keys/node-a.key
 printf '%s\n' "$PRIV_B" > keys/node-b.key
+head -c 32 /dev/urandom | base64 > keys/gossip.key
 chmod 600 keys/*.key
 
 echo "==> writing configs..."
@@ -33,6 +35,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers: []
@@ -48,6 +51,7 @@ stun-servers:
   - stun.l.google.com:19302
   - stun.cloudflare.com:3478
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   bootstrap-peers:

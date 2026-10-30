@@ -18,6 +18,9 @@ stun-servers:
 # advertise-endpoint: ""
 
 gossip:
+  # Required: the same base64-encoded random 32-byte key on every member.
+  # The file must be accessible only to its owner (mode 0600 or 0400).
+  key-file: /etc/tinymesh0/gossip.key
   bind-port: 7946
   retry-join: 10
   # Leave bootstrap-peers empty if this is the seed (first) node in the cluster.

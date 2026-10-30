@@ -1,12 +1,18 @@
 package config
 
 import (
+	"encoding/base64"
+	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 type GossipConfig struct {
+	KeyFile        string   `yaml:"key-file"`
+	SecretKey      []byte   `yaml:"-"`
 	BindPort       int      `yaml:"bind-port"`
 	BootstrapPeers []string `yaml:"bootstrap-peers"`
 	RetryJoin      int      `yaml:"retry-join"`
@@ -63,7 +69,38 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+	cfg.Gossip.SecretKey, err = loadGossipKey(cfg.Gossip.KeyFile)
+	if err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+func loadGossipKey(path string) ([]byte, error) {
+	if path == "" {
+		return nil, fmt.Errorf("gossip.key-file is required")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening gossip key file: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("checking gossip key file: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		return nil, fmt.Errorf("gossip key file must be a regular file accessible only to its owner")
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("reading gossip key file: %w", err)
+	}
+	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(data)))
+	if err != nil || len(key) != 32 {
+		return nil, fmt.Errorf("gossip key file must contain a base64-encoded 32-byte random key")
+	}
+	return key, nil
 }
 
 func Default() *Config {

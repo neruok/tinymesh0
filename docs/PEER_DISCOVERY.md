@@ -6,6 +6,10 @@ Two related but distinct mechanisms control how nodes find each other: **gossip-
 
 ## Part 1 — How a node discovers its peers
 
+### Admission prerequisite
+
+Every member must first load the same private `gossip.key-file`. memberlist uses that 32-byte key for AES-256-GCM authenticated encryption of both UDP gossip and TCP state exchanges. Incoming and outgoing encryption are required; there is no plaintext fallback. Membership events reach WireGuard/DNS synchronization only after that transport authentication. All key holders are trusted members; this is not individual certificate authentication. See [ENROLLMENT.md](ENROLLMENT.md).
+
 ### Step 1 — Assemble your identity packet
 
 Before touching the network, a starting node builds a `NodeState` struct (`gossip/state.go`). This is the single payload that gets gossiped to every other node:
@@ -137,6 +141,7 @@ When node-b starts, memberlist reads:
 
 ```yaml
 gossip:
+  key-file: /etc/tinymesh0/gossip.key
   bootstrap-peers:
     - "node-a:7946"
 ```

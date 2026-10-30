@@ -90,6 +90,7 @@ func (d *Daemon) Run() error {
 	gossipMgr, err := gossip.NewManager(
 		gossip.Config{
 			NodeName:       cfg.Hostname,
+			SecretKey:      cfg.Gossip.SecretKey,
 			BindPort:       cfg.Gossip.BindPort,
 			BootstrapPeers: cfg.Gossip.BootstrapPeers,
 			RetryJoin:      cfg.Gossip.RetryJoin,
